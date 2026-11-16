@@ -1,0 +1,93 @@
+---
+title: chain · 中间件
+description: 独立组合、复用标准 HTTP 中间件。
+---
+
+中间件使用标准签名 `func(http.Handler) http.Handler`，可以包装任意 `http.Handler`。
+
+## 组合中间件
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/hainuoli/mino/rest/chain"
+)
+
+func main() {
+	handler := chain.New(serviceHeader).ThenFunc(hello)
+	log.Fatal(http.ListenAndServe(":8080", handler))
+}
+
+func serviceHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Service", "Mino")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func hello(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "Hello, Mino!")
+}
+```
+
+[完整示例](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/chain/main.go) · `cd examples && go run ./packages/chain`
+
+```sh
+curl -i http://localhost:8080/
+```
+
+响应包含 `X-Service: Mino`，正文为 `Hello, Mino!`。
+
+## 执行顺序
+
+```go
+chain.New(first, second, third).Then(handler)
+```
+
+```text
+first → second → third → handler
+```
+
+请求按注册顺序进入；`next.ServeHTTP` 返回后，按相反顺序退出。
+
+## 复用与扩展
+
+```go
+base := chain.New(serviceHeader)
+
+public := base.ThenFunc(hello)
+private := base.Append(auth).ThenFunc(hello)
+```
+
+`Append`、`Prepend` 和 `Extend` 都返回新链，`base` 保持不变。
+
+| 方法 | 位置 |
+| --- | --- |
+| `Append(mw...)` | 现有中间件之后 |
+| `Prepend(mw...)` | 现有中间件之前 |
+| `Extend(other)` | 在末尾合并另一条链 |
+
+## 接入已有路由
+
+```go
+mux := http.NewServeMux()
+mux.HandleFunc("GET /", hello)
+
+handler := chain.New(serviceHeader).Then(mux)
+```
+
+也可以传入 Mino、Chi 或其他实现 `http.Handler` 的路由。
+
+## 使用约定
+
+- 零值是空链，可直接使用。
+- `Then` 接收 `http.Handler`；`ThenFunc` 接收 `http.HandlerFunc`。
+- `Then(nil)` 和 `ThenFunc(nil)` 使用 `http.DefaultServeMux`。
+- 中间件在构建 handler 时组合；返回 nil handler 会 panic。
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/rest/chain) · [包与默认行为](./packages.mdx)

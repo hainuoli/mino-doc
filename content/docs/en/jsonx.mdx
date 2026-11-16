@@ -1,0 +1,89 @@
+---
+title: jsonx · JSON
+description: Encode JSON, read complete documents, and configure a codec.
+---
+
+Uses `encoding/json` by default. Use it independently.
+
+## Encode and decode
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/hainuoli/mino/core/jsonx"
+)
+
+type User struct {
+	Name string `json:"name"`
+}
+
+func main() {
+	data, err := jsonx.Marshal(User{Name: "Mino"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var user User
+	if err := jsonx.Unmarshal(data, &user); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(user.Name)
+}
+```
+
+[Complete example](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/jsonx/main.go) · `cd examples && go run ./packages/jsonx`
+
+```text
+Mino
+```
+
+## Choose an input or output
+
+| Function | Use |
+| --- | --- |
+| `Marshal` | Encode to `[]byte` |
+| `MarshalToString` | Encode to a string |
+| `Unmarshal` | Decode `[]byte` |
+| `UnmarshalFromString` | Decode a string |
+| `UnmarshalFromReader` | Read a complete Reader and decode it |
+| `Valid` | Check for a complete JSON document |
+
+## Read from a Reader
+
+```go
+func readUser(r io.Reader) (User, error) {
+	var user User
+	err := jsonx.UnmarshalFromReader(r, &user)
+	return user, err
+}
+```
+
+Reads to EOF without closing the Reader. Use [httpx](./httpx.mdx) for bounded HTTP body parsing.
+
+## Replace the codec
+
+Implement the three methods of `jsonx.Codec`:
+
+```go
+type Codec interface {
+	Marshal(v any) ([]byte, error)
+	Unmarshal(data []byte, v any) error
+	Valid(data []byte) bool
+}
+```
+
+```go
+func configureJSON(codec jsonx.Codec) error {
+	return jsonx.SetCodec(codec)
+}
+```
+
+- Configure at startup, before concurrent use. The codec must support concurrent calls.
+- Configuration is process-wide and also affects JSON operations in `httpx`.
+- A nil codec returns an error and preserves the current configuration.
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/core/jsonx) · [Packages and defaults](./packages.mdx)

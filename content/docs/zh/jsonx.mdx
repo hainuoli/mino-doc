@@ -1,0 +1,89 @@
+---
+title: jsonx · JSON
+description: JSON 编解码、完整文档读取与 codec 配置。
+---
+
+默认使用 `encoding/json`，可独立引入。
+
+## 编码与解码
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/hainuoli/mino/core/jsonx"
+)
+
+type User struct {
+	Name string `json:"name"`
+}
+
+func main() {
+	data, err := jsonx.Marshal(User{Name: "Mino"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var user User
+	if err := jsonx.Unmarshal(data, &user); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(user.Name)
+}
+```
+
+[完整示例](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/jsonx/main.go) · `cd examples && go run ./packages/jsonx`
+
+```text
+Mino
+```
+
+## 选择输入与输出
+
+| 函数 | 用途 |
+| --- | --- |
+| `Marshal` | 编码为 `[]byte` |
+| `MarshalToString` | 编码为字符串 |
+| `Unmarshal` | 解码 `[]byte` |
+| `UnmarshalFromString` | 解码字符串 |
+| `UnmarshalFromReader` | 读取完整 Reader 后解码 |
+| `Valid` | 检查是否为完整 JSON 文档 |
+
+## 从 Reader 读取
+
+```go
+func readUser(r io.Reader) (User, error) {
+	var user User
+	err := jsonx.UnmarshalFromReader(r, &user)
+	return user, err
+}
+```
+
+读取到 EOF，不关闭 Reader。处理 HTTP body 时，使用带体积限制的 [httpx](./httpx.mdx)。
+
+## 替换 codec
+
+实现 `jsonx.Codec` 的三个方法：
+
+```go
+type Codec interface {
+	Marshal(v any) ([]byte, error)
+	Unmarshal(data []byte, v any) error
+	Valid(data []byte) bool
+}
+```
+
+```go
+func configureJSON(codec jsonx.Codec) error {
+	return jsonx.SetCodec(codec)
+}
+```
+
+- 在启动阶段、并发调用前配置；codec 自身须支持并发调用。
+- 配置作用于整个进程，也影响 `httpx` 的 JSON 处理。
+- nil codec 返回错误，保留原配置。
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/core/jsonx) · [包与默认行为](./packages.mdx)

@@ -1,0 +1,89 @@
+---
+title: errorx · Errors
+description: Wrap errors, sequence operations, and collect concurrent failures.
+---
+
+Preserves standard error chains for `errors.Is` and `errors.As`.
+
+## Wrap an error
+
+```go title="main.go"
+package main
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/hainuoli/mino/core/errorx"
+)
+
+func main() {
+	notFound := errors.New("user not found")
+	err := errorx.Wrapf(notFound, "get user %d", 42)
+
+	fmt.Println(err)
+	fmt.Println(errors.Is(err, notFound))
+}
+```
+
+[Complete example](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/errorx/main.go) · `cd examples && go run ./packages/errorx`
+
+```text
+get user 42: user not found
+true
+```
+
+`Wrap(err, message)` adds context; `Wrapf` formats it. Both return nil for a nil error.
+
+## Match several errors
+
+```go
+func isExpected(err error) bool {
+	return errorx.In(err, os.ErrNotExist, context.Canceled)
+}
+```
+
+Checks each candidate with `errors.Is`, including wrapped errors.
+
+## Run operations in order
+
+```go
+func execute(validate, save func() error) error {
+	return errorx.Chain(validate, save)
+}
+```
+
+Runs `validate`, then `save` if it succeeds. Returns immediately on the first error.
+
+## Collect concurrent errors
+
+```go
+func runAll(tasks ...func() error) error {
+	var batch errorx.BatchError
+	var wg sync.WaitGroup
+
+	for _, task := range tasks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			batch.Add(task())
+		}()
+	}
+	wg.Wait()
+	return batch.Err()
+}
+```
+
+`Add` ignores nil. `NotNil` reports whether errors have been collected. `Err` joins them with `errors.Join`, preserving `errors.Is` / `errors.As`.
+
+## Keep only the latest error
+
+```go
+var latest errorx.AtomicError
+latest.Set(err)
+err = latest.Load()
+```
+
+Both `AtomicError` and `BatchError` have usable zero values and support concurrent calls. `AtomicError.Set(nil)` leaves the stored error unchanged.
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/core/errorx) · [Packages and defaults](./packages.mdx)

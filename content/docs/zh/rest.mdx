@@ -1,0 +1,130 @@
+---
+title: rest · 路由
+description: 注册路由、分组、中间件与已有 handler。
+---
+
+`Mux` 实现标准 `http.Handler`，路径参数通过 `r.PathValue` 读取。
+
+## 注册路由
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/hainuoli/mino/rest"
+)
+
+func main() {
+	mux := rest.NewMux()
+	mux.Get("/hello/{name}", hello)
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+
+func hello(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello, %s!", r.PathValue("name"))
+}
+```
+
+[完整示例](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/rest/main.go) · `cd examples && go run ./packages/rest`
+
+```sh
+curl http://localhost:8080/hello/Mino
+```
+
+```text
+Hello, Mino!
+```
+
+## 方法与路径
+
+```go
+mux.Get("/users/{id}", getUser)
+mux.Post("/users", createUser)
+mux.HandleFunc("GET api.example.com/users/{id}", getUser)
+```
+
+| 模式 | 匹配 |
+| --- | --- |
+| `/users/{id}` | 一个路径段 |
+| `/files/{path...}` | 末尾的剩余路径 |
+| `/docs/` | 该子树下的路径 |
+| `/docs/{$}` | 仅精确的尾斜杠路径 |
+
+`Head`、`Put`、`Patch`、`Delete`、`Connect`、`Options`、`Trace` 使用相同注册方式。未单独注册 HEAD 时回退到 GET；路径不存在返回 404，方法不匹配返回 405 并设置 `Allow`。
+
+## 分组与局部中间件
+
+```go
+mux.Use(requestID)
+
+api := mux.Route("/api")
+api.Get("/users/{id}", getUser)
+
+private := api.With(auth)
+private.Get("/profile", profile)
+```
+
+| 调用 | 作用范围 |
+| --- | --- |
+| `Use(mw...)` | 当前路由分发，包含 404 / 405 |
+| `Route(prefix)` | 字面前缀下的子路由 |
+| `With(mw...)` | 仅通过该视图注册的 handler |
+
+本例公开路由为 `/api/users/{id}`，`auth` 只应用于 `/api/profile`。
+
+## 挂载已有服务
+
+```go
+legacy := http.NewServeMux()
+legacy.HandleFunc("GET /users/{id}", getUser)
+
+mux.Mount("/legacy", legacy)
+```
+
+请求 `/legacy/users/42` 时，已有服务收到 `/users/42`。挂载前缀会先移除。
+
+## 自定义 404 / 405
+
+```go
+mux.NotFound(func(w http.ResponseWriter, r *http.Request) {
+	http.NotFound(w, r)
+})
+
+mux.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+})
+```
+
+传入 nil 恢复默认处理。JSON 错误响应可以使用 [httpx](./httpx.mdx)。
+
+## 检查路由
+
+```go
+err := rest.Walk(mux, func(route rest.Route) error {
+	fmt.Println(route.Method, route.Pattern)
+	return nil
+})
+```
+
+`Walk` 遍历可检查的叶子路由，组合父级前缀、主机与中间件；回调返回错误时停止。`Routes()` 返回当前层的快照，`Middlewares()` 返回当前层中间件副本。
+
+## 选择路径策略
+
+```go
+mux := rest.NewMux(
+	rest.WithCleanPathRedirect(),
+	rest.WithEscapedPathMatching(),
+	rest.WithTrailingSlashRedirect(),
+	rest.WithRedirectStatus(http.StatusMovedPermanently),
+)
+```
+
+这些策略默认关闭；自动重定向默认使用 307。也可通过 `NewMuxWithConf(MuxConf{...})` 显式配置。具体行为见 [ServeMux 迁移](./migration.mdx)。
+
+注册与配置在开始服务前完成。非法模式、重复端点和 nil handler 在注册时 panic。
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/rest) · [包与默认行为](./packages.mdx)

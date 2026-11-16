@@ -7,6 +7,13 @@
     "getting-started",
     "progressive-adoption",
     "migration",
+    "---按包使用---",
+    "jsonx",
+    "errorx",
+    "mapping",
+    "chain",
+    "httpx",
+    "rest",
     "---查阅与验证---",
     "packages",
     "benchmarks"

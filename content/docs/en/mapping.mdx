@@ -1,0 +1,120 @@
+---
+title: mapping · Field mapping
+description: Bind string inputs to tagged struct fields.
+---
+
+Supply inputs through a lookup function for configuration, command-line arguments, or custom request sources.
+
+## Bind fields
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/hainuoli/mino/core/mapping"
+)
+
+type Filter struct {
+	Page int      `param:"page"`
+	Tags []string `param:"tag"`
+}
+
+func main() {
+	values := map[string][]string{
+		"page": {"2"},
+		"tag":  {"go", "http"},
+	}
+	in := Filter{Page: 1}
+
+	err := mapping.Bind(&in, "param", func(name string) []string {
+		return values[name]
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(in.Page, in.Tags)
+}
+```
+
+[Complete example](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/mapping/main.go) · `cd examples && go run ./packages/mapping`
+
+```text
+2 [go http]
+```
+
+## Input rules
+
+| Input or field | Behavior |
+| --- | --- |
+| Missing input | Preserve the existing value, including a preset default |
+| Explicit empty string | Treat it as input and convert it |
+| Scalar | Use the first value |
+| Slice | Use every value |
+| No tag, or a tag of `-` | Skip the field |
+
+Supports strings, booleans, integers, floats, pointers, slices, and embedded fields. Tag names are literal; options such as `omitempty` are not parsed.
+
+## Distinguish absent input from zero
+
+```go
+type Options struct {
+	Enabled *bool `param:"enabled"`
+}
+```
+
+Without `enabled`, the pointer remains nil. An input of `false` produces a pointer to false.
+
+## Convert a custom type
+
+Implement `encoding.TextUnmarshaler` on the field type:
+
+```go
+type Date struct {
+	time.Time
+}
+
+func (d *Date) UnmarshalText(text []byte) error {
+	value, err := time.Parse("2006-01-02", string(text))
+	if err != nil {
+		return err
+	}
+	d.Time = value
+	return nil
+}
+
+type DateFilter struct {
+	Since Date `param:"since"`
+}
+```
+
+Example input: `since=2026-11-16`. `UnmarshalText` takes precedence over scalar conversion and receives the first input value.
+
+## Handle errors
+
+```go
+if errors.Is(err, mapping.ErrInvalidTarget) {
+	return fmt.Errorf("invalid mapping destination: %w", err)
+}
+```
+
+The destination must be a non-nil struct pointer. Invalid destinations and unsupported field types match `ErrInvalidTarget`. Conversion errors retain their cause and include the tag and field name. Earlier fields may already have changed when binding fails.
+
+## Dereference once
+
+```go
+func setCount(count *int) error {
+	value, err := mapping.Deref(count)
+	if err != nil {
+		return err
+	}
+	value.SetInt(42)
+	return nil
+}
+```
+
+`Deref` returns a `reflect.Value` without allocating. Its target does not need to be a struct.
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/core/mapping) · [Packages and defaults](./packages.mdx)

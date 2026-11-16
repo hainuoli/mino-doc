@@ -1,0 +1,89 @@
+---
+title: errorx · 错误处理
+description: 包装错误、顺序执行与并发错误收集。
+---
+
+保留标准错误链，继续使用 `errors.Is` 和 `errors.As`。
+
+## 包装错误
+
+```go title="main.go"
+package main
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/hainuoli/mino/core/errorx"
+)
+
+func main() {
+	notFound := errors.New("user not found")
+	err := errorx.Wrapf(notFound, "get user %d", 42)
+
+	fmt.Println(err)
+	fmt.Println(errors.Is(err, notFound))
+}
+```
+
+[完整示例](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/errorx/main.go) · `cd examples && go run ./packages/errorx`
+
+```text
+get user 42: user not found
+true
+```
+
+`Wrap(err, message)` 添加说明；`Wrapf` 支持格式化。两者遇到 nil 错误都返回 nil。
+
+## 匹配多个错误
+
+```go
+func isExpected(err error) bool {
+	return errorx.In(err, os.ErrNotExist, context.Canceled)
+}
+```
+
+逐一使用 `errors.Is` 匹配，支持包装后的错误。
+
+## 按顺序执行
+
+```go
+func execute(validate, save func() error) error {
+	return errorx.Chain(validate, save)
+}
+```
+
+先执行 `validate`，成功后执行 `save`；遇到首个错误立即返回。
+
+## 收集并发错误
+
+```go
+func runAll(tasks ...func() error) error {
+	var batch errorx.BatchError
+	var wg sync.WaitGroup
+
+	for _, task := range tasks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			batch.Add(task())
+		}()
+	}
+	wg.Wait()
+	return batch.Err()
+}
+```
+
+`Add` 忽略 nil；`NotNil` 判断是否已收集到错误。`Err` 使用 `errors.Join` 聚合，仍支持 `errors.Is` / `errors.As`。
+
+## 只保留最近的错误
+
+```go
+var latest errorx.AtomicError
+latest.Set(err)
+err = latest.Load()
+```
+
+`AtomicError` 与 `BatchError` 的零值均可直接使用，并支持并发调用。`AtomicError.Set(nil)` 不会清除已保存的错误。
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/core/errorx) · [包与默认行为](./packages.mdx)

@@ -1,0 +1,120 @@
+---
+title: mapping · 字段映射
+description: 用 tag 将字符串输入绑定到结构体。
+---
+
+输入由查值函数提供，可用于配置、命令行参数或自定义请求来源。
+
+## 绑定字段
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/hainuoli/mino/core/mapping"
+)
+
+type Filter struct {
+	Page int      `param:"page"`
+	Tags []string `param:"tag"`
+}
+
+func main() {
+	values := map[string][]string{
+		"page": {"2"},
+		"tag":  {"go", "http"},
+	}
+	in := Filter{Page: 1}
+
+	err := mapping.Bind(&in, "param", func(name string) []string {
+		return values[name]
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(in.Page, in.Tags)
+}
+```
+
+[完整示例](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/mapping/main.go) · `cd examples && go run ./packages/mapping`
+
+```text
+2 [go http]
+```
+
+## 输入规则
+
+| 输入或字段 | 行为 |
+| --- | --- |
+| 未提供输入 | 保留原值，可直接预设默认值 |
+| 显式空字符串 | 作为输入参与转换 |
+| 标量 | 使用第一个值 |
+| 切片 | 使用全部值 |
+| 无 tag 或 tag 为 `-` | 跳过字段 |
+
+支持字符串、布尔、整数、浮点数、指针、切片和嵌入字段。tag 名按字面匹配，不解析 `omitempty` 等选项。
+
+## 区分未提供与零值
+
+```go
+type Options struct {
+	Enabled *bool `param:"enabled"`
+}
+```
+
+未提供 `enabled` 时指针保持 nil；输入 `false` 时得到指向 false 的指针。
+
+## 自定义类型转换
+
+字段类型实现 `encoding.TextUnmarshaler` 即可：
+
+```go
+type Date struct {
+	time.Time
+}
+
+func (d *Date) UnmarshalText(text []byte) error {
+	value, err := time.Parse("2006-01-02", string(text))
+	if err != nil {
+		return err
+	}
+	d.Time = value
+	return nil
+}
+
+type DateFilter struct {
+	Since Date `param:"since"`
+}
+```
+
+输入示例：`since=2026-11-16`。`UnmarshalText` 优先于基础类型转换，使用该字段的第一个输入值。
+
+## 处理错误
+
+```go
+if errors.Is(err, mapping.ErrInvalidTarget) {
+	return fmt.Errorf("invalid mapping destination: %w", err)
+}
+```
+
+目标必须是非 nil 结构体指针。不合法的目标和不支持的字段类型匹配 `ErrInvalidTarget`；转换错误保留原始错误链，并包含 tag 与字段名。失败时，先前的字段可能已更新。
+
+## 解引用一层
+
+```go
+func setCount(count *int) error {
+	value, err := mapping.Deref(count)
+	if err != nil {
+		return err
+	}
+	value.SetInt(42)
+	return nil
+}
+```
+
+`Deref` 返回 `reflect.Value`，不分配内存，也不要求目标是结构体。
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/core/mapping) · [包与默认行为](./packages.mdx)

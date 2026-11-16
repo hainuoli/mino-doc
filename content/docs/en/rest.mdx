@@ -1,0 +1,130 @@
+---
+title: rest · Routing
+description: Register routes, groups, middleware, and existing handlers.
+---
+
+`Mux` implements `http.Handler`. Read path parameters with `r.PathValue`.
+
+## Register a route
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/hainuoli/mino/rest"
+)
+
+func main() {
+	mux := rest.NewMux()
+	mux.Get("/hello/{name}", hello)
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+
+func hello(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello, %s!", r.PathValue("name"))
+}
+```
+
+[Complete example](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/rest/main.go) · `cd examples && go run ./packages/rest`
+
+```sh
+curl http://localhost:8080/hello/Mino
+```
+
+```text
+Hello, Mino!
+```
+
+## Methods and paths
+
+```go
+mux.Get("/users/{id}", getUser)
+mux.Post("/users", createUser)
+mux.HandleFunc("GET api.example.com/users/{id}", getUser)
+```
+
+| Pattern | Matches |
+| --- | --- |
+| `/users/{id}` | One path segment |
+| `/files/{path...}` | The remaining path at the end |
+| `/docs/` | Paths in the subtree |
+| `/docs/{$}` | Only the exact slash-terminated path |
+
+`Head`, `Put`, `Patch`, `Delete`, `Connect`, `Options`, and `Trace` use the same registration style. HEAD falls back to GET when no HEAD route is registered. Missing paths return 404; method mismatches return 405 with `Allow`.
+
+## Groups and local middleware
+
+```go
+mux.Use(requestID)
+
+api := mux.Route("/api")
+api.Get("/users/{id}", getUser)
+
+private := api.With(auth)
+private.Get("/profile", profile)
+```
+
+| Call | Scope |
+| --- | --- |
+| `Use(mw...)` | Dispatch on the current router, including 404 / 405 |
+| `Route(prefix)` | Subrouter under a literal prefix |
+| `With(mw...)` | Only handlers registered through that view |
+
+The public route is `/api/users/{id}`. `auth` applies only to `/api/profile`.
+
+## Mount an existing service
+
+```go
+legacy := http.NewServeMux()
+legacy.HandleFunc("GET /users/{id}", getUser)
+
+mux.Mount("/legacy", legacy)
+```
+
+A request to `/legacy/users/42` reaches the existing service as `/users/42`. The mount prefix is stripped.
+
+## Customize 404 / 405
+
+```go
+mux.NotFound(func(w http.ResponseWriter, r *http.Request) {
+	http.NotFound(w, r)
+})
+
+mux.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+})
+```
+
+Pass nil to restore the default handler. Use [httpx](./httpx.mdx) for JSON error responses.
+
+## Inspect routes
+
+```go
+err := rest.Walk(mux, func(route rest.Route) error {
+	fmt.Println(route.Method, route.Pattern)
+	return nil
+})
+```
+
+`Walk` visits inspectable leaf routes with parent prefixes, hosts, and middleware combined. A callback error stops traversal. `Routes()` returns a snapshot of the current level; `Middlewares()` returns a copy of its middleware.
+
+## Choose path policies
+
+```go
+mux := rest.NewMux(
+	rest.WithCleanPathRedirect(),
+	rest.WithEscapedPathMatching(),
+	rest.WithTrailingSlashRedirect(),
+	rest.WithRedirectStatus(http.StatusMovedPermanently),
+)
+```
+
+These policies default to off; automatic redirects default to 307. `NewMuxWithConf(MuxConf{...})` accepts explicit configuration. See [ServeMux migration](./migration.mdx) for the behavior.
+
+Finish registration and configuration before serving. Invalid patterns, duplicate endpoints, and nil handlers panic during registration.
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/rest) · [Packages and defaults](./packages.mdx)

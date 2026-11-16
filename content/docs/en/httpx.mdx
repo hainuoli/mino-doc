@@ -1,0 +1,142 @@
+---
+title: httpx · Requests and responses
+description: Bind requests, validate input, return JSON, and handle HTTP errors.
+---
+
+Works with any standard HTTP handler. This example uses `http.ServeMux` directly.
+
+## Bind, validate, and respond
+
+```go title="main.go"
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/hainuoli/mino/rest/httpx"
+)
+
+type UserRequest struct {
+	ID      int  `path:"id" json:"-"`
+	Verbose bool `query:"verbose" json:"-"`
+}
+
+func (in *UserRequest) Validate() error {
+	if in.ID <= 0 {
+		return httpx.Errorf(http.StatusBadRequest, "id must be positive")
+	}
+	return nil
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /users/{id}", getUser)
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+	var in UserRequest
+	if err := httpx.Parse(r, &in); err != nil {
+		httpx.Err(w, r, err)
+		return
+	}
+	httpx.OkJSONCtx(r.Context(), w, map[string]any{
+		"id": in.ID, "verbose": in.Verbose,
+	})
+}
+```
+
+[Complete example](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/httpx/main.go) · `cd examples && go run ./packages/httpx`
+
+```sh
+curl 'http://localhost:8080/users/42?verbose=true'
+```
+
+```text
+{"id":42,"verbose":true}
+```
+
+`Parse` calls the target’s `Validate() error` after binding. A non-positive ID returns 400 in this example.
+
+## Choose input sources
+
+`Parse` binds **JSON → form → query → header → path**, then validates. Present values from later sources override earlier ones. Missing input preserves defaults.
+
+| Source | Example tag | Single-source parser |
+| --- | --- | --- |
+| JSON | `json:"name"` | `ParseJSON` |
+| Form | `form:"name"` | `ParseForm` |
+| Query | `query:"page"` | `ParseQuery` |
+| Header | `header:"X-Request-ID"` | `ParseHeader` |
+| Path | `path:"id"` | `ParsePath` |
+
+Single-source parsers do not validate. Non-struct targets, such as maps and slices, receive JSON only. Add `json:"-"` to fields reserved for other sources.
+
+## Parse JSON and limit its size
+
+```go
+func createUser(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := httpx.ParseJSON(r, &in, httpx.WithMaxJSONBody(1<<20)); err != nil {
+		httpx.Err(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, in)
+}
+```
+
+This example sets a 1 MiB limit. The default is 8 MiB; the option affects only this call. `Parse` selects JSON for `application/json` or `+json`; `ParseJSON` ignores Content-Type.
+
+Empty bodies are allowed. Parsing leaves the body open and may partially fill the target before failing. Forms follow `net/http` parsing and limits; parse multipart data separately first.
+
+## Write responses
+
+| Call | Response |
+| --- | --- |
+| `Ok(w)` | 200, no body |
+| `OkJSON(w, value)` | 200, JSON |
+| `JSON(w, status, value)` | JSON with an explicit status |
+| `OkJSONCtx(ctx, w, value)` | 200 with context-aware failure logging |
+| `JSONCtx(ctx, w, status, value)` | Explicit status with context-aware failure logging |
+
+JSON responses add no business envelope. Encoding failures return a fixed JSON 500; write failures are logged through `log/slog`. Statuses 204, 205, and 304 write no body.
+
+## Return HTTP errors
+
+```go
+httpx.Err(w, r, httpx.Errorf(http.StatusNotFound, "user %d not found", id))
+```
+
+| Error | Default response |
+| --- | --- |
+| Ordinary binding or validation errors | 400 |
+| Recognized request-body limit | 413 |
+| `context.Canceled` | 499, no body |
+| `Errorf` / `StatusCoder` | Its 400–599 status |
+| Other errors | 500, internal details hidden |
+
+Call `Err` before committing the response and pass a valid request. A nil error does nothing. Keep 4xx messages suitable for public responses; 5xx messages default to `internal error`. Wrapped status errors are recognized.
+
+## Customize error mapping
+
+```go
+var ErrUserNotFound = errors.New("user not found")
+
+func configureErrors() {
+	httpx.SetErrorHandler(func(r *http.Request, err error) (int, any) {
+		if errors.Is(err, ErrUserNotFound) {
+			return http.StatusNotFound, map[string]string{
+				"message": "user not found",
+			}
+		}
+		return httpx.DefaultErrorHandler(r, err)
+	})
+}
+```
+
+Configure at startup. The mapper applies to every `Err` call in the process and must support concurrent calls. A nil body writes only the status. `SetErrorHandler(nil)` restores the default mapper.
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/rest/httpx) · [Packages and defaults](./packages.mdx)

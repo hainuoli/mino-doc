@@ -1,0 +1,93 @@
+---
+title: chain · Middleware
+description: Compose and reuse standard HTTP middleware independently.
+---
+
+Middleware uses `func(http.Handler) http.Handler` and can wrap any `http.Handler`.
+
+## Compose middleware
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/hainuoli/mino/rest/chain"
+)
+
+func main() {
+	handler := chain.New(serviceHeader).ThenFunc(hello)
+	log.Fatal(http.ListenAndServe(":8080", handler))
+}
+
+func serviceHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Service", "Mino")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func hello(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "Hello, Mino!")
+}
+```
+
+[Complete example](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/chain/main.go) · `cd examples && go run ./packages/chain`
+
+```sh
+curl -i http://localhost:8080/
+```
+
+The response includes `X-Service: Mino` and a `Hello, Mino!` body.
+
+## Execution order
+
+```go
+chain.New(first, second, third).Then(handler)
+```
+
+```text
+first → second → third → handler
+```
+
+Requests enter in registration order. After `next.ServeHTTP` returns, middleware unwinds in reverse order.
+
+## Reuse and extend
+
+```go
+base := chain.New(serviceHeader)
+
+public := base.ThenFunc(hello)
+private := base.Append(auth).ThenFunc(hello)
+```
+
+`Append`, `Prepend`, and `Extend` return new chains without changing `base`.
+
+| Method | Position |
+| --- | --- |
+| `Append(mw...)` | After the existing middleware |
+| `Prepend(mw...)` | Before the existing middleware |
+| `Extend(other)` | Append another chain |
+
+## Wrap an existing router
+
+```go
+mux := http.NewServeMux()
+mux.HandleFunc("GET /", hello)
+
+handler := chain.New(serviceHeader).Then(mux)
+```
+
+Mino, Chi, and other routers implementing `http.Handler` work the same way.
+
+## Conventions
+
+- The zero value is a usable empty chain.
+- `Then` takes an `http.Handler`; `ThenFunc` takes an `http.HandlerFunc`.
+- `Then(nil)` and `ThenFunc(nil)` select `http.DefaultServeMux`.
+- Middleware is composed when the handler is built. Returning a nil handler panics.
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/rest/chain) · [Packages and defaults](./packages.mdx)

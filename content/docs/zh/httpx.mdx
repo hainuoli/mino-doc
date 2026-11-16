@@ -1,0 +1,142 @@
+---
+title: httpx · 请求与响应
+description: 绑定请求、验证输入、返回 JSON 与处理 HTTP 错误。
+---
+
+配合任意标准 HTTP handler 使用。本例直接接入 `http.ServeMux`。
+
+## 绑定、验证与响应
+
+```go title="main.go"
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/hainuoli/mino/rest/httpx"
+)
+
+type UserRequest struct {
+	ID      int  `path:"id" json:"-"`
+	Verbose bool `query:"verbose" json:"-"`
+}
+
+func (in *UserRequest) Validate() error {
+	if in.ID <= 0 {
+		return httpx.Errorf(http.StatusBadRequest, "id must be positive")
+	}
+	return nil
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /users/{id}", getUser)
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+	var in UserRequest
+	if err := httpx.Parse(r, &in); err != nil {
+		httpx.Err(w, r, err)
+		return
+	}
+	httpx.OkJSONCtx(r.Context(), w, map[string]any{
+		"id": in.ID, "verbose": in.Verbose,
+	})
+}
+```
+
+[完整示例](https://github.com/hainuoli/mino-doc/blob/main/examples/packages/httpx/main.go) · `cd examples && go run ./packages/httpx`
+
+```sh
+curl 'http://localhost:8080/users/42?verbose=true'
+```
+
+```text
+{"id":42,"verbose":true}
+```
+
+`Parse` 在绑定后调用目标的 `Validate() error`。本例中，非正数 ID 返回 400。
+
+## 选择输入来源
+
+`Parse` 按 **JSON → form → query → header → path** 绑定，最后验证。存在的后续输入覆盖之前的值；缺失输入保留默认值。
+
+| 来源 | tag 示例 | 单独解析 |
+| --- | --- | --- |
+| JSON | `json:"name"` | `ParseJSON` |
+| 表单 | `form:"name"` | `ParseForm` |
+| Query | `query:"page"` | `ParseQuery` |
+| Header | `header:"X-Request-ID"` | `ParseHeader` |
+| 路径 | `path:"id"` | `ParsePath` |
+
+单独解析不会执行验证。非结构体目标（如 map、切片）仅接收 JSON。专属于其他来源的字段应加 `json:"-"`，避免被 JSON 绑定。
+
+## 解析 JSON 与限制体积
+
+```go
+func createUser(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := httpx.ParseJSON(r, &in, httpx.WithMaxJSONBody(1<<20)); err != nil {
+		httpx.Err(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, in)
+}
+```
+
+本例将上限设为 1 MiB。默认上限为 8 MiB，选项仅作用于本次调用。`Parse` 根据 `application/json` 或 `+json` 选择 JSON；`ParseJSON` 不检查 Content-Type。
+
+允许空 body，解析不关闭 body；失败时目标可能已被部分填充。表单沿用 `net/http` 的解析和限制；multipart 数据需先单独解析。
+
+## 返回响应
+
+| 调用 | 响应 |
+| --- | --- |
+| `Ok(w)` | 200，无正文 |
+| `OkJSON(w, value)` | 200，JSON |
+| `JSON(w, status, value)` | 指定状态码的 JSON |
+| `OkJSONCtx(ctx, w, value)` | 200，关联上下文记录失败日志 |
+| `JSONCtx(ctx, w, status, value)` | 指定状态码，关联上下文记录失败日志 |
+
+JSON 输出不添加业务信封。编码失败返回固定的 JSON 500，写入失败通过 `log/slog` 记录；204、205、304 不写正文。
+
+## 返回 HTTP 错误
+
+```go
+httpx.Err(w, r, httpx.Errorf(http.StatusNotFound, "user %d not found", id))
+```
+
+| 错误 | 默认响应 |
+| --- | --- |
+| 普通绑定或验证错误 | 400 |
+| 可识别的请求体超限 | 413 |
+| `context.Canceled` | 499，无正文 |
+| `Errorf` / `StatusCoder` | 对应的 400–599 状态码 |
+| 其他错误 | 500，隐藏内部细节 |
+
+`Err` 在提交响应前调用，传入有效请求；nil 错误不作处理。4xx 消息应适合直接公开，5xx 默认显示 `internal error`。包装后的状态错误仍可识别。
+
+## 自定义错误映射
+
+```go
+var ErrUserNotFound = errors.New("user not found")
+
+func configureErrors() {
+	httpx.SetErrorHandler(func(r *http.Request, err error) (int, any) {
+		if errors.Is(err, ErrUserNotFound) {
+			return http.StatusNotFound, map[string]string{
+				"message": "user not found",
+			}
+		}
+		return httpx.DefaultErrorHandler(r, err)
+	})
+}
+```
+
+在启动阶段设置，作用于进程内所有 `Err` 调用。映射器须支持并发调用；返回 nil body 时仅写状态码。`SetErrorHandler(nil)` 恢复默认映射。
+
+[API](https://pkg.go.dev/github.com/hainuoli/mino/rest/httpx) · [包与默认行为](./packages.mdx)
