@@ -1,0 +1,113 @@
+---
+title: Progressive adoption
+description: From a standalone utility to an HTTP service, reusing your code at every step.
+---
+
+## Start with a utility
+
+Import `core/jsonx` for JSON conveniences, or `core/errorx` for wrapping and
+aggregating errors that retain `errors.Is` / `errors.As` support. Neither needs
+a router or a Mino application.
+
+```go
+data, err := jsonx.MarshalToString(map[string]string{"hello": "Go"})
+if err != nil {
+	return err
+}
+fmt.Println(data) // {"hello":"Go"}
+```
+
+## Add binding and validation
+
+`httpx` works with the standard library router. A handler can bind parameters,
+validate input, return errors, and write JSON while keeping the standard signature:
+
+```go
+type userRequest struct {
+	ID      int  `path:"id" json:"-"`
+	Verbose bool `query:"verbose" json:"-"`
+}
+
+func (in *userRequest) Validate() error {
+	if in.ID <= 0 {
+		return httpx.Errorf(http.StatusBadRequest, "id must be positive")
+	}
+	return nil
+}
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+	var in userRequest
+	if err := httpx.Parse(r, &in); err != nil {
+		httpx.Err(w, r, err)
+		return
+	}
+	httpx.OkJSONCtx(r.Context(), w, map[string]any{
+		"id": in.ID, "verbose": in.Verbose,
+	})
+}
+```
+
+Register it with `net/http`:
+
+```go
+mux := http.NewServeMux()
+mux.HandleFunc("GET /users/{id}", getUser)
+```
+
+`GET /users/42?verbose=true` returns `{"id":42,"verbose":true}`.
+An invalid ID returns 400. `Parse` binds present values in **JSON → form → query
+→ header → path** order, then calls `Validate() error` if implemented. Missing
+inputs keep defaults; later sources override earlier ones. Use `json:"-"` for
+fields reserved for other sources.
+
+JSON bodies default to an 8 MiB limit, adjustable per call with
+`httpx.WithMaxJSONBody`. `ParseJSON`, `ParseQuery`, `ParseHeader`, `ParsePath`,
+and `ParseForm` are also available individually.
+
+## Add routing and groups
+
+Keep **the same `getUser` handler**, and change the registration:
+
+```go
+mux := rest.NewMux()
+api := mux.Route("/api")
+api.Get("/users/{id}", getUser)
+```
+
+Mino exposes parameters through `r.PathValue`. Its mux is an `http.Handler`,
+so `http.Server`, `httptest`, and standard middleware work directly.
+Routing includes method matching, HEAD fallback to GET, 404/405 handling,
+host-specific routes, route inspection, and optional path/redirect policies.
+
+## Compose middleware and existing components
+
+```go
+func requestHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Service", "mino")
+		next.ServeHTTP(w, r)
+	})
+}
+```
+
+Apply it with `mux.Use(requestHeader)`, scope it to selected registrations with
+`mux.With(requestHeader).Get(...)`, or use the immutable `chain` package on any
+existing handler:
+
+```go
+handler := chain.New(requestHeader).Then(existingHandler)
+```
+
+Mount another router or handler with `mux.Mount("/legacy", existingHandler)`;
+Mino strips the mount prefix before delegating. Keep your existing components
+and choose when to adopt more.
+
+See [the runnable progressive example](https://github.com/hainuoli/mino-doc/blob/main/examples/progressive/main.go):
+`cd examples && go run ./progressive`, then request `/api/users/42?verbose=true`.
+
+Configure routes and middleware before serving. Optional `jsonx.SetCodec` and
+`httpx.SetErrorHandler` configure process-wide defaults at startup, before
+concurrent use. JSON defaults to `encoding/json`; error responses hide internal
+server details, and failure logging uses standard `log/slog`.
+
+Before running the checked-in example, follow [checkout setup](./getting-started.mdx#checkout-setup). See [packages and defaults](./packages.mdx) for limits and configuration.

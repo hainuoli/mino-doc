@@ -1,0 +1,14 @@
+{
+  "title": "English",
+  "root": true,
+  "pages": [
+    "index",
+    "---Start here---",
+    "getting-started",
+    "progressive-adoption",
+    "migration",
+    "---Reference and evidence---",
+    "packages",
+    "benchmarks"
+  ]
+}

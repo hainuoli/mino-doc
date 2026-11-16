@@ -1,0 +1,83 @@
+---
+title: 包与默认行为
+description: 按职责选择包，查阅默认行为、限制与配置。
+---
+
+## 选择包
+
+| 包 | 职责 | API |
+| --- | --- | --- |
+| `core/jsonx` | JSON 编解码与 codec 替换 | [文档](https://pkg.go.dev/github.com/hainuoli/mino/core/jsonx) |
+| `core/errorx` | 错误包装、顺序执行与并发聚合 | [文档](https://pkg.go.dev/github.com/hainuoli/mino/core/errorx) |
+| `core/mapping` | 与 HTTP 无关的 tag 字段绑定与类型转换 | [文档](https://pkg.go.dev/github.com/hainuoli/mino/core/mapping) |
+| `rest/chain` | 标准 HTTP 中间件的不可变组合 | [文档](https://pkg.go.dev/github.com/hainuoli/mino/rest/chain) |
+| `rest` | 路由、分组、中间件、挂载与路由检查 | [文档](https://pkg.go.dev/github.com/hainuoli/mino/rest) |
+| `rest/httpx` | 请求绑定、验证、错误适配与 JSON 响应 | [文档](https://pkg.go.dev/github.com/hainuoli/mino/rest/httpx) |
+
+六个生产包只依赖 Mino 自身与 Go 标准库，测试和基准依赖不进入运行时导入图。
+
+```text
+rest       → rest/chain
+rest/httpx → core/jsonx, core/mapping, core/errorx
+core/mapping → core/errorx
+```
+
+## JSON
+
+`jsonx` 默认使用 `encoding/json`，提供字节、字符串、完整 Reader 文档的编解码便利函数，以及有效性检查。
+
+`SetCodec` 替换进程级 codec，也影响经由 `httpx` 发起的调用。在并发使用前完成配置，codec 本身须支持并发调用。传入 nil codec 会返回错误并保留原配置。Reader 工具不关闭输入，也不设定 HTTP body 上限。
+
+## 错误
+
+`errorx.Wrap` 和 `Wrapf` 保留原始错误链，传入 nil 时返回 nil。`In` 通过 `errors.Is` 检查多个候选错误，`Chain` 在首个错误处停止。
+
+`AtomicError` 并发保存最后一个非 nil 错误；`BatchError` 收集错误，通过 `Err` 聚合后继续支持 `errors.Is` / `errors.As`。两者的零值都可直接使用。
+
+HTTP 状态码和公开响应由 `httpx` 或应用负责，不放进 `core/errorx`。
+
+## 字段映射
+
+`mapping.Bind` 接收非 nil 结构体指针、tag 名和返回字符串切片的查值函数。缺失输入保留原值，显式空字符串属于有效输入；标量取首值，切片取全部值。
+
+支持基础类型转换、指针、切片、嵌入字段和 `encoding.TextUnmarshaler`。tag 按字面指定字段名，不定义验证或默认值。目标不合法或字段类型不支持时，可通过 `ErrInvalidTarget` 识别。`Deref` 检查非 nil 指针并解引用一层。
+
+## 中间件与路由
+
+`chain.New(...).Then(handler)` 组合标准 `func(http.Handler) http.Handler` 中间件。`Append`、`Prepend`、`Extend` 返回新链；零值可用，`Then(nil)` 使用 `http.DefaultServeMux`。
+
+Mino mux 实现 `http.Handler`，支持方法与主机路由、路径参数、HEAD 回退到 GET、404/405、分组、中间件、挂载和路由检查。
+
+- `Use` 包装路由分发，也覆盖 404 和 405。
+- `With` 只作用于通过该视图注册的 handler。
+- `Route` 按字面前缀创建分组。
+- `Mount` 移除挂载前缀后转交已有 handler。
+- `Routes`、`Walk` 用于检查已注册的路由。
+
+路径清理重定向、转义路径匹配和尾斜杠重定向默认关闭，自动重定向状态码默认 307。开始服务前完成注册与配置；非法模式和重复端点在注册时 panic。
+
+选项及兼容边界见 [ServeMux 迁移指南](./migration.mdx)。
+
+## HTTP 请求处理
+
+`httpx.Parse(r, &in)` 按 **JSON → form → query → header → path** 绑定，再调用目标已实现的 `Validate() error`。后面存在的输入覆盖前面的值，缺失输入保留默认值。切片、map 等非结构体 JSON 目标只接收 JSON，再按需执行已有验证方法。
+
+Content-Type 为 `application/json` 或 `+json` 时选择 JSON。字段遵循配置的 codec 规则，专属于其他来源的字段使用 `json:"-"`。JSON body 默认上限为 **8 MiB**，可用 `WithMaxJSONBody` 按次调整。允许空 body，不关闭 body；解析失败时，目标可能已被部分填充。
+
+`ParseJSON`、`ParseQuery`、`ParseHeader`、`ParsePath`、`ParseForm` 只处理单一来源，不执行验证。`ParseJSON` 不根据 Content-Type 选择协议。表单沿用标准库解析与限制，multipart 数据须单独解析。
+
+## HTTP 响应与错误
+
+| 函数 | 响应 |
+| --- | --- |
+| `Ok(w)` | 200，无响应体 |
+| `OkJSON(w, v)` | 200，JSON 响应 |
+| `JSON(w, status, v)` | 指定状态码的 JSON 响应 |
+| `OkJSONCtx(ctx, w, v)` / `JSONCtx(ctx, w, status, v)` | 关联上下文记录失败日志的 JSON 响应 |
+| `Err(w, r, err)` | 将错误映射为响应；nil 错误不作处理 |
+
+JSON 在提交响应前完成编码。编码失败时返回固定 JSON 500；写入失败通过 `log/slog` 记录日志。不添加业务信封，204、205、304 不写响应体。
+
+`Err` 在响应提交前调用，须传入有效的非 nil 请求。常规解析错误映射为 400，可识别的体积超限映射为 413，未知服务端错误映射为 500 并隐藏内部细节。`Errorf` 创建 HTTP 状态错误，也支持包装后的 `StatusCoder` 错误。
+
+`SetErrorHandler` 设置进程级错误映射器，传 nil 恢复 `DefaultErrorHandler`。并发使用前完成配置，自定义 handler 须支持并发调用；未处理的错误可委托回 `DefaultErrorHandler`。

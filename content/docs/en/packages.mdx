@@ -1,0 +1,83 @@
+---
+title: Packages and defaults
+description: Choose packages by responsibility. Check defaults, limits, and configuration.
+---
+
+## Choose a package
+
+| Package | Responsibility | API |
+| --- | --- | --- |
+| `core/jsonx` | JSON encoding, decoding, and codec replacement | [Reference](https://pkg.go.dev/github.com/hainuoli/mino/core/jsonx) |
+| `core/errorx` | Error wrapping, sequencing, and concurrent aggregation | [Reference](https://pkg.go.dev/github.com/hainuoli/mino/core/errorx) |
+| `core/mapping` | Tagged field binding and conversion, independent of HTTP | [Reference](https://pkg.go.dev/github.com/hainuoli/mino/core/mapping) |
+| `rest/chain` | Immutable composition of standard HTTP middleware | [Reference](https://pkg.go.dev/github.com/hainuoli/mino/rest/chain) |
+| `rest` | Routing, groups, middleware, mounts, and route inspection | [Reference](https://pkg.go.dev/github.com/hainuoli/mino/rest) |
+| `rest/httpx` | Request binding, validation, error adaptation, and JSON responses | [Reference](https://pkg.go.dev/github.com/hainuoli/mino/rest/httpx) |
+
+All six production packages depend only on Mino and the Go standard library. Test and benchmark requirements are outside the runtime import graph.
+
+```text
+rest       → rest/chain
+rest/httpx → core/jsonx, core/mapping, core/errorx
+core/mapping → core/errorx
+```
+
+## JSON
+
+`jsonx` defaults to `encoding/json`. It supports bytes, strings, reading a complete JSON document from an `io.Reader`, and checking validity.
+
+`SetCodec` replaces the process-wide codec, including calls made through `httpx`. Configure it before concurrent use; a codec must support concurrent calls. Passing a nil codec returns an error and preserves the current one. Reader helpers do not close the reader or impose an HTTP body limit.
+
+## Errors
+
+`errorx.Wrap` and `Wrapf` preserve the original error chain and return nil for a nil error. `In` checks alternatives using `errors.Is`; `Chain` stops at the first error.
+
+`AtomicError` stores the latest non-nil error across goroutines. `BatchError` collects errors and joins them with `Err`, retaining `errors.Is` / `errors.As` support. Both have usable zero values.
+
+HTTP status codes and public responses belong to `httpx` or the application, rather than `core/errorx`.
+
+## Field mapping
+
+`mapping.Bind` accepts a non-nil pointer to a struct, a tag name, and a lookup function returning string values. Missing input leaves fields unchanged; an explicit empty string is input. Scalars take the first value, slices take all values.
+
+It supports scalar conversion, pointers, slices, embedded fields, and `encoding.TextUnmarshaler`. Tags name fields literally; they do not define validation or defaults. `ErrInvalidTarget` identifies invalid destinations and unsupported field types. `Deref` checks a non-nil pointer and dereferences it once.
+
+## Middleware and routing
+
+`chain.New(...).Then(handler)` composes standard `func(http.Handler) http.Handler` middleware. `Append`, `Prepend`, and `Extend` return new chains. A chain's zero value is usable; `Then(nil)` selects `http.DefaultServeMux`.
+
+Mino's mux implements `http.Handler`. It supports method and host routing, path parameters, HEAD fallback to GET, 404/405 handling, groups, middleware, mounts, and route inspection.
+
+- `Use` wraps dispatch, including 404 and 405 responses.
+- `With` applies middleware to registrations made through that view.
+- `Route` creates a group under a literal prefix.
+- `Mount` delegates to an existing handler after stripping the mount prefix.
+- `Routes` and `Walk` expose registered routes.
+
+Path-cleaning redirects, escaped-path matching, and trailing-slash redirects default to off. Automatic redirects use 307 unless configured. Finish registration and configuration before serving requests. Invalid patterns and duplicate endpoints panic during registration.
+
+See [ServeMux migration](./migration.mdx) for options and compatibility details.
+
+## HTTP request handling
+
+`httpx.Parse(r, &in)` binds **JSON → form → query → header → path**, then calls `Validate() error` when the target implements it. Present values from later sources override earlier ones; missing input preserves defaults. Non-struct JSON targets, such as slices and maps, receive JSON only, followed by validation if implemented.
+
+JSON is selected by `application/json` or a `+json` Content-Type. Fields follow the configured codec's rules; use `json:"-"` for fields reserved for other sources. The default JSON body limit is **8 MiB**, adjustable per call with `WithMaxJSONBody`. Empty bodies are allowed, and parsing does not close the body. A failed parse may leave the target partially populated.
+
+`ParseJSON`, `ParseQuery`, `ParseHeader`, `ParsePath`, and `ParseForm` are single-source helpers; they do not run validation. `ParseJSON` ignores Content-Type. Forms use the standard library's parsing and limits; parse multipart data separately.
+
+## HTTP responses and errors
+
+| Function | Response |
+| --- | --- |
+| `Ok(w)` | 200 with no body |
+| `OkJSON(w, v)` | 200 with JSON |
+| `JSON(w, status, v)` | JSON with an explicit status |
+| `OkJSONCtx(ctx, w, v)` / `JSONCtx(ctx, w, status, v)` | JSON with context-aware failure logging |
+| `Err(w, r, err)` | Map an error to a response; nil errors do nothing |
+
+JSON is encoded before the response is committed. Encoding failures produce a fixed JSON 500 response; write failures are logged through `log/slog`. No business envelope is added. Statuses 204, 205, and 304 have no response body.
+
+Call `Err` before committing a response and pass a valid, non-nil request. Ordinary parse errors map to 400, recognized body-limit errors to 413, and unknown server errors to 500 with a generic public message. `Errorf` creates HTTP status errors; wrapped `StatusCoder` errors are also supported.
+
+`SetErrorHandler` configures a process-wide error mapper; nil restores `DefaultErrorHandler`. Configure it before concurrent use, and make custom handlers safe for concurrent calls. Use `DefaultErrorHandler` to delegate unhandled errors back to the defaults.

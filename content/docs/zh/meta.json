@@ -1,0 +1,14 @@
+{
+  "title": "简体中文",
+  "root": true,
+  "pages": [
+    "index",
+    "---开始使用---",
+    "getting-started",
+    "progressive-adoption",
+    "migration",
+    "---查阅与验证---",
+    "packages",
+    "benchmarks"
+  ]
+}

@@ -1,0 +1,174 @@
+---
+title: 性能与体积
+description: 真实测量、明确范围、可复现的代码与数据。
+---
+
+## 路由性能
+
+单位 **ns/op**，越低越好；每行最快值加粗。
+
+| 场景 | Mino | Gin | Chi | go-zero router |
+| --- | ---: | ---: | ---: | ---: |
+| 静态路由 | **85.5** | 101.2 | 220.3 | 123.4 |
+| 单路径参数 | 183.0 | **127.0** | 343.5 | 385.2 |
+| 三个路径参数 | 274.5 | **197.6** | 499.1 | 679.2 |
+| 1,000 条静态路由 | **131.3** | 170.6 | 355.1 | 5,328.0 |
+| 五层中间件 | **254.9** | 279.1 | 410.7 | 304.4 |
+| 路由 + JSON 响应 | **178.5** | 217.9 | 316.5 | 219.5 |
+
+## 已记录的测试
+
+- 日期：2026-11-15。
+- 环境：Apple M4、macOS 15.6、darwin/arm64、Go 1.25.4，`-cpu=1`。
+- 对比版本：Gin v1.12.0、Chi v5.5.0、go-zero v1.10.3。
+- Mino 使用本地源码，通过 `replace github.com/hainuoli/mino => ../../mino` 接入；该次测试的生产源码未偏离记录的基础提交。
+- 提交、源码 SHA-256 和完整环境见[环境清单](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/environment.json)。依赖版本由基准模块的 [go.mod](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/go.mod) 与 [go.sum](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/go.sum) 固定。
+
+基准使用独立开发模块，框架依赖不进入 Mino 的运行时导入图。
+
+## 复现
+
+需要 Go 1.25+ 和 Python 3，无须额外 Python 包。完成[源码准备](./getting-started.mdx#源码准备)后，从 **mino-doc 根目录**运行：
+
+```sh
+sh benchmarks/run.sh
+```
+
+脚本验证模块、检查适配器响应、运行 vet、记录环境、执行路由基准、构建体积示例并生成汇总。采样时保持机器空闲。脚本覆盖 `benchmarks/results/`，发布新数据时同步更新 README 表格。
+
+进入 mino-doc 的 `benchmarks/` 后，也可分别运行：
+
+```sh
+go test ./...
+go test -run '^$' -bench '^BenchmarkRouter$' -benchmem -benchtime=1s -count=5 -cpu=1
+go run ./tools/footprint
+```
+
+根据已有原始数据重新生成汇总：
+
+```sh
+python3 report.py > results/summary.md
+```
+
+## 路由测试方法
+
+通过各框架的真实 `http.Handler.ServeHTTP` 入口调用。在同一测试二进制内顺序测试，每组采样五次、每次至少一秒，报告中位数，同时保留全部采样、最小/最大值、B/op 和 allocs/op。
+
+| 场景 | 注册与请求工作 |
+| --- | --- |
+| `Static` | `GET /ping`，写出 `ok` |
+| `Param` | `GET /users/{id}`，读取并写出 `42` |
+| `MultiParam` | `GET /orgs/{org}/repos/{repo}/issues/{id}`，读取三个参数并写出 `acme/mino/42` |
+| `Routes1000` | 注册 `/resources/r0/items` 至 `/resources/r999/items`，均匀轮询 1,000 条路由，写出 `ok` |
+| `Middleware5` | 静态路由经过五层中间件，每层设置同一响应头后调用下一层 |
+| `JSON` | `GET /json`，使用 `encoding/json.Encoder` 编码同一结构体，写出 `{"message":"hello","id":42}` 及换行 |
+
+- Mino、Chi 使用 `{id}`，Gin、go-zero 使用 `:id`。分别通过 `Request.PathValue`、`Context.Param`、`chi.URLParam`、`pathvar.Vars` 读取参数。
+- 各适配器调用相同的响应函数；JSON 场景测量路由与公共编码器，不比较框架原生 JSON 或绑定辅助函数。
+- Gin 使用 release 模式的 `gin.New()`；所有框架均无默认中间件。go-zero 只使用 `rest/router.NewRouter()`。五层中间件场景中，Gin 使用原生中间件签名，其余使用标准签名，设置响应头的工作相同。
+- 每次分发使用预构建请求的一份新浅拷贝，开销计入所有框架，避免跨操作复用路径参数等状态。handler 不修改原请求的上下文、请求头或 URL。
+- 所有框架复用相同的响应 writer，保留响应头并丢弃响应体，排除 recorder 分配与 body buffer 增长。设置响应头的分配仍计入；每条路由的状态、响应体与测试响应头另用真实 `httptest.ResponseRecorder` 校验。
+- 构造路由、注册与创建请求不计时；不含网络、并发吞吐、错误路径、生产中间件与业务逻辑。真实项目应结合自己的路由分布进行负载测试。
+
+## 参数路由的开销
+
+参数路由比静态路由多了匹配、提取、写入和读取参数的工作，两者是不同负载，耗时差不能全部归因于参数存储。
+
+实测还显示了具体的分配差异：
+
+| 场景 | Mino ns/op | Gin ns/op | Mino B/op | Gin B/op | Mino allocs/op | Gin allocs/op |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 单参数 | 183.0 | 127.0 | 664 | 328 | 4 | 2 |
+| 三参数 | 274.5 | 197.6 | 736 | 400 | 6 | 4 |
+
+Mino 当前在[路由分发](https://github.com/hainuoli/mino/blob/main/rest/mux.go#L897)中调用 `Request.SetPathValue`，让已有 handler 直接使用 `r.PathValue`。在 [Go 1.25.4](https://github.com/golang/go/blob/go1.25.4/src/net/http/request.go#L1478) 中，新请求走 map 存储路径；分配 profile 确认，map 初始化与首次写入每次产生 **2 次分配、336 B**。
+
+Gin v1.12.0 [池化 Context](https://github.com/gin-gonic/gin/blob/v1.12.0/gin.go#L667)，将参数保存在[复用的切片](https://github.com/gin-gonic/gin/blob/v1.12.0/tree.go#L499)中。本基准使用它原生的 `c.Param`，不额外将值复制到 `Request.PathValue`。
+
+上述 map 分配解释了这两组测试的分配差额。匹配与查询工作同样影响延迟；现有 profile 不足以把耗时差精确归因，也不代表所有使用标准 API 的实现都必然承担相同成本。
+
+### 复现分配 profile
+
+完成[源码准备](./getting-started.mdx#源码准备)后，从 mino-doc 根目录运行：
+
+```sh
+cd benchmarks
+mkdir -p profiles
+go test -c -o profiles/router.test
+./profiles/router.test -test.run '^$' \
+  -test.bench '^BenchmarkRouter$/^Param$/^Mino$' \
+  -test.cpu=1 -test.benchtime=100000x \
+  -test.memprofilerate=1 -test.memprofile=profiles/mino.allocs.pprof
+go tool pprof -sample_index=alloc_objects -list='SetPathValue' \
+  profiles/router.test profiles/mino.allocs.pprof
+go tool pprof -sample_index=alloc_space -unit=bytes -list='SetPathValue' \
+  profiles/router.test profiles/mino.allocs.pprof
+```
+
+`-test.memprofilerate=1` 记录每次分配，会改变耗时；ns/op 以常规基准为准。[分配摘要](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/parameter-allocations.txt)记录了 100,001 次初始化：预热 1 次、计时操作 100,000 次，`SetPathValue` 合计分配 200,002 个对象、33,600,336 字节。
+
+## 源码与二进制体积
+
+**2,003 行代码 · 86.6 KiB 源码 · 零第三方运行时依赖**
+
+
+| 生产源码 | 代码行数 | 体积 |
+| --- | ---: | ---: |
+| 核心工具 | 283 | 11.7 KiB |
+| 路由与中间件组合 | 1,417 | 59.8 KiB |
+| HTTP 辅助层 | 303 | 15.2 KiB |
+| **全部六个包** | **2,003** | **86.6 KiB** |
+
+代码行数排除注释和空行；源码体积包含注释与空白。均不计入测试、示例和工具代码。
+
+
+
+Mino 路由在最小 HTTP 服务中，比标准库基线仅增加 **88 KiB**：
+
+| 服务 | 二进制体积 |
+| --- | ---: |
+| `net/http` 基线 | 5.30 MiB |
+| **Mino 路由** | **5.39 MiB** |
+| Mino 路由 + 绑定/JSON | 5.77 MiB |
+| Gin | 13.47 MiB |
+| Chi | 5.55 MiB |
+| go-zero 路由 | 7.77 MiB |
+
+Go 1.25.4 · linux/amd64 · CGO 关闭 · `-trimpath -ldflags='-s -w'`。包含 Go runtime；绑定/JSON 示例额外引入 `httpx`。
+
+
+## 体积测量方法
+
+[footprint 工具](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/tools/footprint/main.go) 只使用标准库，输出精确字节数和依赖计数。
+
+### 生产源码
+
+递归统计 `core/` 与 `rest/` 中非测试 `.go` 文件，按包归类。源码字节包含注释与空白；代码行数使用 Go lexer 去除注释，再统计非空物理行，保留字符串中的内容。测试、示例、基准工具、文档和依赖源码不计入。
+
+这是未压缩源码大小，不是模块下载或编译归档大小。1 KiB = 1,024 字节，1 MiB = 1,048,576 字节。
+
+### 最小服务二进制
+
+统一构建[六个服务示例](https://github.com/hainuoli/mino-doc/tree/main/benchmarks/cmd)：
+
+```sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 GOFLAGS= GOEXPERIMENT= \
+  go build -trimpath -ldflags='-s -w' -o /tmp/mino-server ./cmd/mino
+```
+
+标准库基线与四种框架提供相同的 `GET /ping` 和 `GET /users/{id}`，使用相同的 `http.ListenAndServe` 入口；Gin 无默认中间件，go-zero 仅使用路由器。`mino-httpx` 单独展示增加绑定与 JSON 输出的成本，其响应工作不同，不计入路由性能比较。
+
+使用默认 build tags，不启用框架专属体积优化。二进制包含 Go runtime 和 HTTP 服务，随 Go 版本、目标平台、选项和功能变化。所有示例共用基准模块固定的依赖版本。
+
+### 依赖计数
+
+在相同目标环境下运行 `go list -deps -json`，统计非标准库包及所属模块，排除示例的 `main`，包含框架自身与传递导入。
+
+`mino` 导入两个 Mino 包、一个 Mino 模块，无第三方运行时模块；`mino-httpx` 导入全部六个 Mino 包。测试依赖与未实际导入的模块不计入。
+
+## 原始数据
+
+- [环境与源码指纹](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/environment.json)
+- [全部 120 次路由采样](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/router.txt)
+- [源码与二进制精确统计](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/footprint.json)
+- [汇总、分配次数与耗时范围](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/summary.md)

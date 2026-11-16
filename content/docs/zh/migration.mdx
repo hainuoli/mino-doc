@@ -1,0 +1,84 @@
+---
+title: 从 ServeMux 迁移
+description: 保留标准 handler，按原服务的需要开启路径策略。
+---
+
+## 替换构造器
+
+保留 `Handle`、`HandleFunc` 注册以及标准 handler，只替换 mux 的创建方式：
+
+```diff
+- mux := http.NewServeMux()
++ mux := rest.NewMux()
+
+ mux.HandleFunc("GET /users/{id}", getUser)
+```
+
+继续使用 `r.PathValue`、已有中间件与 `http.Server` 配置。
+
+## 按需匹配路径行为
+
+Mino 的三个路径策略默认关闭。原服务依赖哪些行为，就开启对应选项：
+
+| 原服务的行为 | Mino 选项 |
+| --- | --- |
+| 清理重复斜杠与 `.`、`..` 后重定向 | `rest.WithCleanPathRedirect()` |
+| 按转义后的分段匹配，允许参数中包含 `%2F` | `rest.WithEscapedPathMatching()` |
+| `/docs` 自动跳转到已注册的 `/docs/` | `rest.WithTrailingSlashRedirect()` |
+| 修改自动重定向状态码 | `rest.WithRedirectStatus(code)` |
+
+例如，匹配本例 Go 1.25 服务的路径行为：
+
+```go
+mux := rest.NewMux(
+	rest.WithCleanPathRedirect(),
+	rest.WithEscapedPathMatching(),
+	rest.WithTrailingSlashRedirect(),
+	rest.WithRedirectStatus(http.StatusMovedPermanently),
+)
+```
+
+默认重定向状态码为 **307**，同一设置作用于路径清理和尾斜杠重定向。[Go 1.26](https://go.dev/doc/go1.26#net/http) 将标准库尾斜杠重定向改为 307；请按原项目的 Go 版本与 HTTP 测试选择策略。
+
+## 运行同一个服务
+
+完成[源码准备](./getting-started.mdx#源码准备)后，在 `examples/` 目录中每次运行一条命令：
+
+```sh
+go run ./migrate -stdlib
+go run ./migrate
+go run ./migrate -clean-path -escaped-path -trailing-slash -redirect-status=301
+```
+
+三条命令分别选择标准库、Mino 默认配置和匹配本例的路径策略。使用 `-addr=:8081` 可更改监听地址。
+
+| 请求 | Mino 默认配置 | 本例配置 |
+| --- | --- | --- |
+| `/users/42` | 200，响应 `42` | 200，响应 `42` |
+| `/users//42` | 404 | 301 → `/users/42` |
+| `/files/a%2Fb` | 404 | 200，响应 `a/b` |
+| `/docs` | 404 | 301 → `/docs/` |
+
+查看响应而不自动跟随重定向：
+
+```sh
+curl -i http://localhost:8080/users//42
+curl -i http://localhost:8080/files/a%2Fb
+curl -i http://localhost:8080/docs
+```
+
+## 调整注册辅助函数
+
+如果现有函数接收具体的 `*http.ServeMux`，可改为只约定所需方法的局部接口：
+
+```go
+type routeMux interface {
+	http.Handler
+	Handle(string, http.Handler)
+	HandleFunc(string, func(http.ResponseWriter, *http.Request))
+}
+```
+
+全局 `http.Handle` / `http.HandleFunc` 注册应移到新 mux 实例，再将实例交给服务。完整代码见[迁移示例](https://github.com/hainuoli/mino-doc/blob/main/examples/migrate/main.go)。
+
+本指南面向现代 `ServeMux` 模式；旧版 `httpmuxgo121=1` 和各 Go 版本的所有边界行为不属于兼容承诺。迁移时继续运行原有 HTTP 测试。

@@ -1,0 +1,109 @@
+---
+title: 渐进式使用
+description: 从独立工具包到 HTTP 服务，每一步都复用已有代码。
+---
+
+## 从一个工具包开始
+
+需要 JSON 便利函数时，引入 `core/jsonx`；需要包装或聚合错误时，引入
+`core/errorx`，继续使用 `errors.Is` / `errors.As`。两者都不要求先接入路由，
+也不要求创建 Mino 应用。
+
+```go
+data, err := jsonx.MarshalToString(map[string]string{"hello": "Go"})
+if err != nil {
+	return err
+}
+fmt.Println(data) // {"hello":"Go"}
+```
+
+## 加入绑定与验证
+
+`httpx` 可以直接配合标准库路由。handler 保持标准签名，就能完成参数绑定、
+输入验证、错误响应和 JSON 输出：
+
+```go
+type userRequest struct {
+	ID      int  `path:"id" json:"-"`
+	Verbose bool `query:"verbose" json:"-"`
+}
+
+func (in *userRequest) Validate() error {
+	if in.ID <= 0 {
+		return httpx.Errorf(http.StatusBadRequest, "id must be positive")
+	}
+	return nil
+}
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+	var in userRequest
+	if err := httpx.Parse(r, &in); err != nil {
+		httpx.Err(w, r, err)
+		return
+	}
+	httpx.OkJSONCtx(r.Context(), w, map[string]any{
+		"id": in.ID, "verbose": in.Verbose,
+	})
+}
+```
+
+先用 `net/http` 注册：
+
+```go
+mux := http.NewServeMux()
+mux.HandleFunc("GET /users/{id}", getUser)
+```
+
+`GET /users/42?verbose=true` 返回 `{"id":42,"verbose":true}`，非法 ID 返回 400。
+`Parse` 按 **JSON → form → query → header → path** 的顺序绑定存在的输入，
+再调用目标已实现的 `Validate() error`。缺失输入保留默认值，后面的来源覆盖前面的值。
+专属于其他来源的字段使用 `json:"-"`。
+
+JSON body 默认限制为 8 MiB，可通过 `httpx.WithMaxJSONBody` 按次调整。
+也可以单独使用 `ParseJSON`、`ParseQuery`、`ParseHeader`、`ParsePath` 和 `ParseForm`。
+
+## 加入路由与分组
+
+继续使用**同一个 `getUser` handler**，只调整注册代码：
+
+```go
+mux := rest.NewMux()
+api := mux.Route("/api")
+api.Get("/users/{id}", getUser)
+```
+
+路由参数通过标准 `r.PathValue` 读取。Mino mux 本身就是 `http.Handler`，
+可以直接交给 `http.Server`，使用 `httptest` 测试，接入已有的标准中间件。
+路由支持方法匹配、HEAD 回退到 GET、404/405、主机路由、路由检查，
+以及可选的路径匹配和重定向策略。
+
+## 组合中间件与已有组件
+
+```go
+func requestHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Service", "mino")
+		next.ServeHTTP(w, r)
+	})
+}
+```
+
+用 `mux.Use(requestHeader)` 应用于路由；用
+`mux.With(requestHeader).Get(...)` 只作用于指定注册；也可以只引入不可变的
+`chain`，包装任意已有 handler：
+
+```go
+handler := chain.New(requestHeader).Then(existingHandler)
+```
+
+通过 `mux.Mount("/legacy", existingHandler)` 挂载已有路由或 handler，Mino
+会先移除挂载前缀再转交请求。已有组件可以继续保留，何时增加能力由项目自己决定。
+
+完整代码见[渐进式示例](https://github.com/hainuoli/mino-doc/blob/main/examples/progressive/main.go)：
+`cd examples && go run ./progressive`，然后访问 `/api/users/42?verbose=true`。
+
+路由和中间件在开始服务前完成配置。可选的 `jsonx.SetCodec` 与
+`httpx.SetErrorHandler` 在启动阶段、并发使用前设置进程级默认策略。
+JSON 默认使用 `encoding/json`；错误响应隐藏服务端内部细节，失败日志沿用标准 `log/slog`。
+
+运行仓库示例前，请完成[源码准备](./getting-started.mdx#源码准备)。参数限制与配置约定见[包与默认行为](./packages.mdx)。

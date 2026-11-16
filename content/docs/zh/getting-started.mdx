@@ -1,0 +1,85 @@
+---
+title: 快速开始
+description: 用一个标准 HTTP handler，运行第一个 Mino 服务。
+---
+
+需要 **Go 1.23+**。
+
+## 安装
+
+```sh
+mkdir mino-hello
+cd mino-hello
+go mod init example.com/mino-hello
+go get github.com/hainuoli/mino/rest/httpx
+```
+
+## 创建服务
+
+保存为 `main.go`：
+
+```go title="main.go"
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/hainuoli/mino/rest"
+	"github.com/hainuoli/mino/rest/httpx"
+)
+
+func main() {
+	mux := rest.NewMux()
+
+	mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		httpx.OkJSON(w, "Hello, Mino!")
+	})
+
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+```
+
+## 运行
+
+```sh
+go run .
+```
+
+在另一个终端请求服务：
+
+```sh
+curl http://localhost:8080/
+# "Hello, Mino!"
+```
+
+mux 实现 `http.Handler`，handler 使用标准库签名。`httpx.OkJSON` 直接将值输出为 JSON。
+
+## 下一步
+
+[渐进式使用](./progressive-adoption.mdx)展示如何加入绑定、验证和路由分组；已有标准库项目可直接阅读[迁移指南](./migration.mdx)。
+
+仓库内的可执行版本见 [examples/hello](https://github.com/hainuoli/mino-doc/blob/main/examples/hello/main.go)。运行前按[源码准备](#源码准备)放好两个仓库。
+
+## 源码准备
+
+仅运行仓库内的示例与基准时，需要相邻的两个 checkout：
+
+```sh
+git clone https://github.com/hainuoli/mino.git
+git clone https://github.com/hainuoli/mino-doc.git
+cd mino-doc
+```
+
+```text
+workspace/
+├── mino/
+└── mino-doc/
+```
+
+开发模块通过 `replace github.com/hainuoli/mino => ../../mino` 引用本地源码。
+
+```sh
+cd examples
+go run ./hello
+```

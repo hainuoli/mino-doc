@@ -1,0 +1,85 @@
+---
+title: Getting started
+description: Run your first Mino service with a standard HTTP handler.
+---
+
+Requires **Go 1.23+**.
+
+## Install
+
+```sh
+mkdir mino-hello
+cd mino-hello
+go mod init example.com/mino-hello
+go get github.com/hainuoli/mino/rest/httpx
+```
+
+## Create a service
+
+Save as `main.go`:
+
+```go title="main.go"
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/hainuoli/mino/rest"
+	"github.com/hainuoli/mino/rest/httpx"
+)
+
+func main() {
+	mux := rest.NewMux()
+
+	mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		httpx.OkJSON(w, "Hello, Mino!")
+	})
+
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+```
+
+## Run
+
+```sh
+go run .
+```
+
+Request the service from another terminal:
+
+```sh
+curl http://localhost:8080/
+# "Hello, Mino!"
+```
+
+The mux implements `http.Handler`; handlers use standard-library signatures. `httpx.OkJSON` returns the value as JSON.
+
+## Next
+
+Follow [progressive adoption](./progressive-adoption.mdx) to add binding, validation, and route groups, or use the [migration guide](./migration.mdx) for an existing standard-library service.
+
+The executable version is in [examples/hello](https://github.com/hainuoli/mino-doc/blob/main/examples/hello/main.go). To run it, follow [checkout setup](#checkout-setup).
+
+## Checkout setup
+
+Only the checked-in examples and benchmarks require sibling checkouts:
+
+```sh
+git clone https://github.com/hainuoli/mino.git
+git clone https://github.com/hainuoli/mino-doc.git
+cd mino-doc
+```
+
+```text
+workspace/
+├── mino/
+└── mino-doc/
+```
+
+The development modules use `replace github.com/hainuoli/mino => ../../mino` to reference local source.
+
+```sh
+cd examples
+go run ./hello
+```

@@ -1,0 +1,209 @@
+---
+title: Benchmarks and footprint
+description: Recorded measurements, explicit scope, and reproducible code and data.
+---
+
+## Router performance
+
+Time in **ns/op**; lower is better. The lowest median in each row is bold.
+
+| Scenario | Mino | Gin | Chi | go-zero router |
+| --- | ---: | ---: | ---: | ---: |
+| Static route | **85.5** | 101.2 | 220.3 | 123.4 |
+| One path parameter | 183.0 | **127.0** | 343.5 | 385.2 |
+| Three path parameters | 274.5 | **197.6** | 499.1 | 679.2 |
+| 1,000 static routes | **131.3** | 170.6 | 355.1 | 5,328.0 |
+| Five middleware layers | **254.9** | 279.1 | 410.7 | 304.4 |
+| Route + JSON response | **178.5** | 217.9 | 316.5 | 219.5 |
+
+## Recorded run
+
+- Date: 2026-11-15.
+- Timing: Apple M4, macOS 15.6, darwin/arm64, Go 1.25.4, one benchmark CPU.
+- Frameworks: Gin v1.12.0, Chi v5.5.0, go-zero v1.10.3.
+- Mino: local checkout through `replace github.com/hainuoli/mino => ../../mino`.
+  The base revision and SHA-256 fingerprint of production sources are in
+  [environment.json](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/environment.json). Production sources were unchanged
+  from that base revision during this run.
+- All versions, including the shared dependency graph selected by Go modules,
+  are pinned in [go.mod](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/go.mod) and [go.sum](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/go.sum).
+
+## Run everything
+
+Requires Go 1.25+ and Python 3; no additional Python packages are needed.
+After [checkout setup](./getting-started.mdx#checkout-setup), run from the **mino-doc root**:
+
+```sh
+sh benchmarks/run.sh
+```
+
+The script verifies modules, checks adapter correctness, runs vet, records the
+environment, benchmarks routing, builds the size fixtures, and generates a
+summary. Keep the machine otherwise idle during the timing run. It overwrites
+the files in `results/`; README tables describe the checked-in run and should be
+updated together when publishing new results.
+
+From mino-doc’s `benchmarks/` directory:
+
+```sh
+go test ./...
+go test -run '^$' -bench '^BenchmarkRouter$' -benchmem -benchtime=1s -count=5 -cpu=1
+go run ./tools/footprint
+```
+
+To regenerate the summary from saved raw data:
+
+```sh
+python3 report.py > results/summary.md
+```
+
+## Routing methodology
+
+Each framework is called through its real `http.Handler.ServeHTTP` entry point.
+Construction and registration are outside the timed loop. Frameworks run
+sequentially in the same test binary. Each case has five independent benchmark
+samples of at least one second; the published number is the median. All samples,
+min–max ranges, bytes/op, and allocations/op are retained.
+
+| Case | Registered routes / request work |
+| --- | --- |
+| `Static` | `GET /ping`, write `ok` |
+| `Param` | `GET /users/{id}`, read and write `42` |
+| `MultiParam` | `GET /orgs/{org}/repos/{repo}/issues/{id}`, read all three values and write `acme/mino/42` |
+| `Routes1000` | 1,000 routes `/resources/r0/items` through `/resources/r999/items`; cycle uniformly through all of them, write `ok` |
+| `Middleware5` | Static route with five middleware layers, each setting the same response header before calling the next handler |
+| `JSON` | `GET /json`, encode the same struct with `encoding/json.Encoder`, return `{"message":"hello","id":42}` plus a newline |
+
+- Mino/Chi use `{id}`; Gin/go-zero use `:id`. Parameters are extracted with
+  `Request.PathValue`, `Context.Param`, `chi.URLParam`, or `pathvar.Vars`.
+- Every handler calls the same response function. The JSON case compares routing
+  plus a common encoder; it does not compare native JSON/binding helpers.
+- Gin uses `gin.New()` in release mode. No framework's default middleware is
+  enabled. go-zero uses `rest/router.NewRouter()`, without its full REST server
+  stack. Standard middleware is used for Mino/Chi/go-zero; Gin uses its native
+  middleware signature with the same header-setting work.
+- Each dispatch starts with a fresh shallow copy of a prebuilt request. That
+  copy's cost is included for all frameworks. This prevents Mino's path-value
+  map, or another router's request state, from being reused across operations.
+  The original request's context, headers, and URL are not modified by handlers.
+- All cases use the same response writer: it retains headers and discards body
+  bytes. A writer is reused within each benchmark sample. This avoids measuring
+  recorder allocation and body-buffer growth. Header-setting allocations remain
+  included. Response correctness is checked separately using real
+  `httptest.ResponseRecorder` instances for every route in every adapter.
+- Route registration, request construction, network I/O, concurrent throughput,
+  error paths, production middleware, and business logic are outside this scope.
+  A uniform synthetic route corpus is not a substitute for an application's own
+  routing distribution. Run application-specific load tests for deployment decisions.
+
+## Parameter-route cost
+
+Parameter routes match, capture, store, and read values that static routes do not. They are different workloads; their time difference is not solely parameter-storage cost.
+
+The recorded comparison also exposes an allocation difference:
+
+| Case | Mino ns/op | Gin ns/op | Mino B/op | Gin B/op | Mino allocs/op | Gin allocs/op |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| One parameter | 183.0 | 127.0 | 664 | 328 | 4 | 2 |
+| Three parameters | 274.5 | 197.6 | 736 | 400 | 6 | 4 |
+
+Mino's current [parameter dispatch](https://github.com/hainuoli/mino/blob/main/rest/mux.go#L897) calls `Request.SetPathValue` so existing handlers can read `r.PathValue`. In [Go 1.25.4](https://github.com/golang/go/blob/go1.25.4/src/net/http/request.go#L1478), fresh requests follow a map-backed path; allocation profiling attributes **two allocations and 336 bytes per request** to its initialization and first insertion.
+
+Gin v1.12.0 [pools its Context](https://github.com/gin-gonic/gin/blob/v1.12.0/gin.go#L667) and stores captured parameters in a [reused slice](https://github.com/gin-gonic/gin/blob/v1.12.0/tree.go#L499). This comparison uses its native `c.Param`, without copying values into `Request.PathValue`.
+
+The map allocations account for the observed allocation gap in these cases. Routing and lookup work also affect latency; the profile does not establish a precise share of the timing gap or an unavoidable cost for every implementation using the standard API.
+
+### Reproduce the allocation profile
+
+From the mino-doc root, after [checkout setup](./getting-started.mdx#checkout-setup):
+
+```sh
+cd benchmarks
+mkdir -p profiles
+go test -c -o profiles/router.test
+./profiles/router.test -test.run '^$' \
+  -test.bench '^BenchmarkRouter$/^Param$/^Mino$' \
+  -test.cpu=1 -test.benchtime=100000x \
+  -test.memprofilerate=1 -test.memprofile=profiles/mino.allocs.pprof
+go tool pprof -sample_index=alloc_objects -list='SetPathValue' \
+  profiles/router.test profiles/mino.allocs.pprof
+go tool pprof -sample_index=alloc_space -unit=bytes -list='SetPathValue' \
+  profiles/router.test profiles/mino.allocs.pprof
+```
+
+`-test.memprofilerate=1` instruments every allocation and changes timing; use the ordinary benchmark results for ns/op. The [allocation summary](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/parameter-allocations.txt) records 100,001 observed initializations: one warm-up dispatch and 100,000 timed operations, totaling 200,002 objects and 33,600,336 bytes in `SetPathValue`.
+
+## Source and binary footprint
+
+**2,003 code lines · 86.6 KiB of source · Zero third-party runtime dependencies**
+
+
+| Production source | Code lines | Size |
+| --- | ---: | ---: |
+| Core utilities | 283 | 11.7 KiB |
+| Router + middleware composition | 1,417 | 59.8 KiB |
+| HTTP helpers | 303 | 15.2 KiB |
+| **All six packages** | **2,003** | **86.6 KiB** |
+
+Code lines exclude comments and blank lines. Source size includes comments and whitespace; tests, examples, and tools are excluded.
+
+
+
+The Mino router adds just **88 KiB** to a minimal standard-library HTTP server:
+
+| Server | Binary size |
+| --- | ---: |
+| `net/http` baseline | 5.30 MiB |
+| **Mino router** | **5.39 MiB** |
+| Mino router + binding/JSON | 5.77 MiB |
+| Gin | 13.47 MiB |
+| Chi | 5.55 MiB |
+| go-zero router | 7.77 MiB |
+
+Go 1.25.4 · linux/amd64 · CGO disabled · `-trimpath -ldflags='-s -w'`. Includes the Go runtime; the binding/JSON fixture also imports `httpx`.
+
+
+## Footprint methodology
+
+[`tools/footprint`](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/tools/footprint/main.go) uses only the Go standard library.
+It emits exact byte counts and dependency counts as JSON.
+
+**Production source:** recursively collect non-test `.go` files under `core/`
+and `rest/`, grouped by package. File bytes include comments and whitespace.
+For code-line counts, use Go's lexer to blank comments without changing strings,
+then count nonblank physical lines. Raw-string content counts as code. Tests,
+examples, benchmark fixtures, documentation, and dependency sources are excluded.
+This is uncompressed source size, not a module download or compiled archive size.
+
+**Minimal server binaries:** build the six explicit [`cmd/`](https://github.com/hainuoli/mino-doc/tree/main/benchmarks/cmd/) fixtures with:
+
+```sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 GOFLAGS= GOEXPERIMENT= \
+  go build -trimpath -ldflags='-s -w' -o /tmp/mino-server ./cmd/mino
+```
+
+The baseline and four router fixtures expose `GET /ping` (write `ok`) and
+`GET /users/{id}` (write the extracted ID) using the common `http.ListenAndServe`
+entry point. Gin uses release mode and no default middleware; go-zero uses only
+its router. The separate `mino-httpx` fixture adds request binding and JSON
+responses to illustrate progressive adoption; its response work differs and it
+is not included in the timing comparison.
+
+All sizes include the Go runtime and HTTP server. Default build tags are used;
+no framework-specific size optimizations are applied. Sizes vary with Go
+version, target, flags, and enabled features. The fixtures share the pinned
+benchmark module's dependency versions.
+
+**Dependencies:** for each fixture run `go list -deps -json` with the same target
+environment. Count non-standard-library packages and unique owning modules,
+excluding the fixture's own `main`. Mino's own packages/module are included in
+these counts. `mino` imports two Mino packages and one Mino module, with zero
+third-party runtime modules; `mino-httpx` imports all six Mino packages. Test-only
+requirements and unused modules in `go.mod` are not runtime imports.
+
+## Evidence
+
+- [Environment, source fingerprint, and framework versions](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/environment.json)
+- [All 120 raw timing samples](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/router.txt)
+- [Exact source and binary footprint](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/footprint.json)
+- [Generated tables, allocations, and timing ranges](https://github.com/hainuoli/mino-doc/blob/main/benchmarks/results/summary.md)
