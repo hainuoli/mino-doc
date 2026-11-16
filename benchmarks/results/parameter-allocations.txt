@@ -1,0 +1,26 @@
+Parameter allocation profile
+Date: 2026-11-15
+Go: go1.25.4 darwin/arm64
+CPU: Apple M4
+Harness module: github.com/hainuoli/mino-doc/benchmarks
+Mino base: c7d39a11002a26096ad49da83373ddff4919ff3e
+Production source SHA-256: f0e99b0d8fd617b1d23f75063953a9e1a616cdbf2cfe23389ac537756c7611e9
+
+Selection: ^BenchmarkRouter$/^Param$/^Mino$
+Timed operations: 100000
+Warm-up dispatches: 1
+Memory sampling rate: 1 (every allocation)
+Profile-mode timing is intentionally omitted; see router.txt for ordinary timings.
+
+pprof allocation attribution: net/http.(*Request).SetPathValue
+Go source: src/net/http/request.go at go1.25.4
+
+Location                          Objects       Bytes
+map initialization (line 1483)     100001        4800048
+first insertion (line 1485)        100001       28800288
+Total                             200002       33600336
+Per dispatch                           2            336
+
+Values above are from pprof alloc_objects and alloc_space reports.
+This attributes allocations, not a percentage of the latency difference.
+Reproduction: content/docs/en/benchmarks.mdx#reproduce-the-allocation-profile

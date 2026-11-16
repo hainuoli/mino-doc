@@ -1,0 +1,74 @@
+{
+  "go": "go1.25.4",
+  "target": "linux/amd64; CGO_ENABLED=0; GOAMD64=v1; -trimpath -ldflags='-s -w'; default build tags",
+  "source": {
+    "core/errorx": {
+      "files": 1,
+      "code_lines": 70,
+      "bytes": 3117
+    },
+    "core/jsonx": {
+      "files": 1,
+      "code_lines": 78,
+      "bytes": 3814
+    },
+    "core/mapping": {
+      "files": 1,
+      "code_lines": 135,
+      "bytes": 5026
+    },
+    "rest": {
+      "files": 3,
+      "code_lines": 1367,
+      "bytes": 58209
+    },
+    "rest/chain": {
+      "files": 1,
+      "code_lines": 50,
+      "bytes": 3024
+    },
+    "rest/httpx": {
+      "files": 3,
+      "code_lines": 303,
+      "bytes": 15523
+    }
+  },
+  "binaries": [
+    {
+      "name": "stdlib",
+      "bytes": 5558456,
+      "non_std_packages": 0,
+      "non_std_modules": 0
+    },
+    {
+      "name": "mino",
+      "bytes": 5648568,
+      "non_std_packages": 2,
+      "non_std_modules": 1
+    },
+    {
+      "name": "mino-httpx",
+      "bytes": 6049976,
+      "non_std_packages": 6,
+      "non_std_modules": 1
+    },
+    {
+      "name": "gin",
+      "bytes": 14123192,
+      "non_std_packages": 100,
+      "non_std_modules": 19
+    },
+    {
+      "name": "chi",
+      "bytes": 5820600,
+      "non_std_packages": 1,
+      "non_std_modules": 1
+    },
+    {
+      "name": "gozero",
+      "bytes": 8143032,
+      "non_std_packages": 87,
+      "non_std_modules": 16
+    }
+  ]
+}

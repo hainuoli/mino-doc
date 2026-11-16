@@ -1,0 +1,23 @@
+{
+  "measured_at_utc": "2026-11-15T15:29:12.340986+00:00",
+  "go": "go version go1.25.4 darwin/arm64",
+  "platform": "macOS-15.6-arm64-arm-64bit-Mach-O",
+  "cpu": "Apple M4",
+  "base_commit": "c7d39a11002a26096ad49da83373ddff4919ff3e",
+  "production_source_sha256": "f0e99b0d8fd617b1d23f75063953a9e1a616cdbf2cfe23389ac537756c7611e9",
+  "production_source_modified_from_base": false,
+  "benchmark_command": "go test -run '^$' -bench '^BenchmarkRouter$' -benchmem -benchtime=1s -count=5 -cpu=1",
+  "go_environment": {
+    "CGO_ENABLED": "1",
+    "GOARCH": "arm64",
+    "GOEXPERIMENT": "",
+    "GOFLAGS": "",
+    "GOOS": "darwin",
+    "GOTOOLCHAIN": "auto"
+  },
+  "versions": {
+    "github.com/gin-gonic/gin": "v1.12.0",
+    "github.com/go-chi/chi/v5": "v5.5.0",
+    "github.com/zeromicro/go-zero": "v1.10.3"
+  }
+}
