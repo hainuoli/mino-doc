@@ -63,13 +63,13 @@ button:focus-visible,
   outline-offset: 5px;
 }
 .mino-wordmark {
-  font-size: 27px;
-  font-weight: 750;
-  letter-spacing: -0.065em;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
 }
-.mino-wordmark span {
-  color: var(--mino-accent);
+.mino-wordmark img {
+  width: 104px;
+  height: auto;
 }
 .landing {
   width: min(1184px, 100%);
@@ -127,7 +127,9 @@ button:focus-visible,
   color: var(--color-fd-primary-foreground);
   font-size: 14px;
   font-weight: 550;
-  transition: opacity 0.15s;
+  transition:
+    opacity 160ms,
+    transform 200ms;
 }
 .button-primary:hover {
   opacity: 0.87;
@@ -143,6 +145,14 @@ button:focus-visible,
 .text-link:hover {
   text-decoration: underline;
   text-underline-offset: 4px;
+}
+.button-primary > svg,
+.text-link > svg {
+  transition: transform 200ms;
+}
+.button-primary:is(:hover, :focus-visible) > svg,
+.text-link:is(:hover, :focus-visible) > svg {
+  transform: translateX(3px);
 }
 .install-command {
   display: flex;
@@ -192,17 +202,12 @@ button:focus-visible,
   font-size: 11px;
 }
 .code-window pre {
-  filter: grayscale(1);
   padding: 22px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.8;
   overflow: auto;
   background: transparent !important;
   tab-size: 2;
-}
-.dark .code-window pre,
-.dark .code-window pre span {
-  color: var(--shiki-dark) !important;
 }
 .code-result {
   display: flex;
@@ -373,6 +378,9 @@ button:focus-visible,
   grid-template-columns: 240px minmax(0, 1fr);
   gap: 60px;
 }
+.benchmark-layout > * {
+  min-width: 0;
+}
 .big-number {
   font-size: 65px;
   font-weight: 500;
@@ -494,7 +502,6 @@ button:focus-visible,
 }
 .docs-prose pre {
   tab-size: 2;
-  filter: grayscale(1);
 }
 .docs-prose table {
   font-size: 13px;
@@ -615,12 +622,12 @@ button:focus-visible,
     font-size: 27px;
   }
   .benchmark-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 26px;
   }
   .benchmark-aside {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 5px 24px;
   }
   .big-number {
@@ -669,25 +676,15 @@ button:focus-visible,
   html {
     scroll-behavior: auto;
   }
-  * {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
     transition: none !important;
   }
 }
 
-/* Original lunar identity: neutral tones, pixel edges, and pencil-like lines. */
-.mino-wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.mino-wordmark > svg {
-  width: 19px;
-  height: 24px;
-  shape-rendering: crispEdges;
-}
-.mino-wordmark > span {
-  margin-left: -7px;
-}
+/* Moon illustration. */
 .moon-art {
   position: relative;
   width: 100%;
@@ -798,9 +795,129 @@ button:focus-visible,
   position: relative;
   border: 1px solid var(--color-fd-border);
 }
+
+/* Small movements, with the drawing as the focal point. */
+.landing[data-motion="ready"] .hero h1 span::after {
+  transform-origin: left center;
+  animation: mino-underline 1000ms 180ms cubic-bezier(0.22, 1, 0.36, 1)
+    backwards;
+}
+.landing[data-motion="ready"] .moon-float {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mino-float 9s ease-in-out infinite;
+}
+.landing[data-motion="ready"]
+  :is(.orbit-back, .orbit-sketch, .orbit-front, .sketch-arrow) {
+  stroke-dasharray: 1;
+  animation: mino-draw 1400ms 150ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.landing[data-motion="ready"] .orbit-sketch {
+  animation-delay: 300ms;
+}
+.landing[data-motion="ready"] .sketch-arrow {
+  animation-delay: 500ms;
+}
+.landing[data-motion="ready"] :is(.sketch-star, .pixel-star) {
+  animation: mino-twinkle 7s ease-in-out infinite alternate;
+}
+.landing[data-motion="ready"] .sketch-star:nth-of-type(2n) {
+  animation-delay: -3s;
+}
+.landing[data-motion="ready"]
+  :is(
+    .moon-float,
+    .orbit-back,
+    .orbit-sketch,
+    .orbit-front,
+    .sketch-arrow,
+    .sketch-star,
+    .pixel-star
+  ) {
+  animation-play-state: paused;
+}
+.landing[data-motion="ready"][data-hero-visible="true"]
+  :is(
+    .moon-float,
+    .orbit-back,
+    .orbit-sketch,
+    .orbit-front,
+    .sketch-arrow,
+    .sketch-star,
+    .pixel-star
+  ) {
+  animation-play-state: running;
+}
+.growth-step {
+  position: relative;
+}
+.growth-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 42px;
+  width: calc(100% - 18px);
+  border-top: 1px dashed var(--color-fd-border);
+}
+.feature-index,
+.step-number {
+  transition:
+    color 200ms,
+    background-color 200ms,
+    transform 200ms;
+}
+@media (hover: hover) and (pointer: fine) {
+  .button-primary:hover {
+    transform: translateY(-2px);
+  }
+  .feature:hover .feature-index {
+    color: var(--color-fd-foreground);
+    transform: translateY(-2px);
+  }
+  .growth-step:hover .step-number {
+    background: var(--color-fd-primary);
+    color: var(--color-fd-primary-foreground);
+  }
+}
+@keyframes mino-underline {
+  from {
+    transform: rotate(-2deg) scaleX(0);
+  }
+  to {
+    transform: rotate(-2deg) scaleX(1);
+  }
+}
+@keyframes mino-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes mino-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  50% {
+    transform: translateY(-6px) rotate(0.6deg);
+  }
+}
+@keyframes mino-twinkle {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 0.7;
+  }
+}
 @media (max-width: 1000px) {
   .hello-section {
     gap: 36px;
+  }
+  .growth-step::after {
+    display: none;
   }
 }
 @media (max-width: 760px) {
@@ -838,7 +955,7 @@ button:focus-visible,
     font-size: 14px;
   }
   .code-window pre {
-    font-size: 11px;
+    font-size: 12px;
   }
   .benchmark-table table {
     font-size: 12px;

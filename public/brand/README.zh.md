@@ -13,7 +13,7 @@
 | 完整字标 | [黑色 SVG](svg/mino-wordmark-black.svg) · [PNG](png/mino-wordmark-black.png) | [白色 SVG](svg/mino-wordmark-white.svg) · [PNG](png/mino-wordmark-white.png) | 网站页头、README、封面 |
 | 独立图标 | [黑色 SVG](svg/mino-symbol-black.svg) · [PNG](png/mino-symbol-black.png) | [白色 SVG](svg/mino-symbol-white.svg) · [PNG](png/mino-symbol-white.png) | 带眼睛的独立 M |
 | 方形头像 | [浅底 SVG](svg/mino-avatar-light.svg) · [PNG](png/mino-avatar-light.png) | [深底 SVG](svg/mino-avatar-dark.svg) · [PNG](png/mino-avatar-dark.png) | 自带背景的项目头像 |
-| 小尺寸图标 | [黑色 SVG](svg/mino-favicon-black.svg) | [白色 SVG](svg/mino-favicon-white.svg) | 去掉眼睛的简化 M |
+| 小尺寸图标 | [黑色 SVG](svg/mino-favicon-black.svg) | [白色 SVG](svg/mino-favicon-white.svg) | 与头像一致，保留眼睛的 M |
 
 ## 网站图标
 
@@ -26,4 +26,4 @@
 - 浅色背景使用黑色 `#090909`，深色背景使用白色 `#FFFFFF`。保持原始比例，并在图形周围留出空白。
 - 网站资源路径以 `/brand/` 开头，例如 `/brand/svg/mino-wordmark-white.svg`。
 
-来源：`Mino-No-Star-Complete-Brand-Kit.zip`。原始图形与预览图保持不变。`mino-moon.svg` 为独立的网站插画。
+来源：`Mino-No-Star-Complete-Brand-Kit.zip`。保留原始手绘轮廓；独立图标、头像与 favicon 统一居中并保留眼睛。`mino-moon.svg` 为独立的网站插画。

@@ -12,6 +12,7 @@ export const { staticGET: GET } = createFromSource(source, {
       url: page.url,
       title: page.data.title,
       description: page.data.description,
+      tag: page.url.startsWith("/docs/en") ? "en" : "zh",
       structuredData,
     };
   },

@@ -1,4 +1,5 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
+import { BrandLogo } from "@/components/brand-logo";
 
 export function baseOptions(
   lang: "zh" | "en" = "zh",
@@ -6,14 +7,7 @@ export function baseOptions(
 ): BaseLayoutProps {
   return {
     nav: {
-      title: (
-        <span className="mino-wordmark">
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M10 2h7v3h-5v3H9v8h3v3h5v3h-7v-3H6v-3H3V8h3V5h4z" />
-          </svg>
-          mino<span aria-hidden="true">.</span>
-        </span>
-      ),
+      title: <BrandLogo />,
     },
     githubUrl: "https://github.com/hainuoli/mino",
     links: [

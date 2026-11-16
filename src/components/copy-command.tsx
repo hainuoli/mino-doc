@@ -22,7 +22,7 @@ export function CopyCommand({
     }
   }
   return (
-    <div className="install-command">
+    <div className="install-command" data-reveal data-reveal-delay="180">
       <code>{command}</code>
       <button
         onClick={copy}

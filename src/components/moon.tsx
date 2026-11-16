@@ -2,27 +2,37 @@ import { moonPixels } from "@/lib/moon";
 
 export function Moon() {
   return (
-    <div className="moon-art" aria-hidden="true">
+    <div
+      className="moon-art"
+      aria-hidden="true"
+      data-reveal
+      data-reveal-delay="120"
+    >
       <svg viewBox="0 0 520 440" fill="none" className="moon-orbit">
         <path
           className="orbit-back"
+          pathLength={1}
           d="M85 286C17 268 52 181 188 135C305 94 450 106 477 151C497 189 426 258 297 293C207 317 122 314 85 286Z"
         />
         <path
           className="orbit-sketch"
+          pathLength={1}
           d="M79 285C31 263 64 190 185 145C305 99 433 104 469 147"
         />
-        <g
-          transform="translate(110 62) scale(4.15)"
-          fill="currentColor"
-          shapeRendering="crispEdges"
-        >
-          {moonPixels.map((p, i) => (
-            <path key={i} d={p.d} opacity={p.opacity} />
-          ))}
+        <g className="moon-float">
+          <g
+            transform="translate(110 62) scale(4.15)"
+            fill="currentColor"
+            shapeRendering="crispEdges"
+          >
+            {moonPixels.map((p, i) => (
+              <path key={i} d={p.d} opacity={p.opacity} />
+            ))}
+          </g>
         </g>
         <path
           className="orbit-front"
+          pathLength={1}
           d="M48 232C49 296 167 333 309 292C413 263 478 199 478 164"
         />
         <path
@@ -39,6 +49,7 @@ export function Moon() {
         />
         <path
           className="sketch-arrow"
+          pathLength={1}
           d="M126 363C168 386 224 392 266 374M255 370l13 3l-7 13"
         />
         <path

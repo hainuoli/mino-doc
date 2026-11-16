@@ -4,6 +4,8 @@ import { highlight } from "fumadocs-core/highlight";
 import { CopyCommand } from "./copy-command";
 import { hello } from "@/lib/examples";
 import { Moon } from "./moon";
+import { BrandLogo } from "./brand-logo";
+import { LandingMotion } from "./landing-motion";
 
 const samples = [
   ["Static route", "静态路由", 85.5, 101.2, 220.3, 123.4],
@@ -90,13 +92,16 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
   const code = await highlight(hello, {
     lang: "go",
     themes: { light: "github-light", dark: "github-dark" },
+    defaultColor: false,
   });
   return (
-    <main className="landing" lang={zh ? "zh-CN" : "en"}>
+    <LandingMotion lang={zh ? "zh-CN" : "en"}>
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">MINO / SMALL STEPS. OPEN POSSIBILITIES.</p>
-          <h1>
+          <p className="eyebrow" data-reveal>
+            MINO / SMALL STEPS. OPEN POSSIBILITIES.
+          </p>
+          <h1 data-reveal data-reveal-delay="50">
             {zh ? (
               <>
                 从一个包开始。
@@ -111,12 +116,12 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
               </>
             )}
           </h1>
-          <p className="hero-description">
+          <p className="hero-description" data-reveal data-reveal-delay="100">
             {zh
               ? "按需引入，自然组合。让服务逐步成长，始终写熟悉的 Go。"
               : "Adopt what you need. Compose as you grow. Keep writing familiar Go."}
           </p>
-          <div className="hero-actions">
+          <div className="hero-actions" data-reveal data-reveal-delay="150">
             <Link className="button-primary" href={`${doc}/getting-started`}>
               {zh ? "开始使用" : "Get started"}
               <ArrowRight size={16} />
@@ -131,7 +136,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
             label={zh ? "复制安装命令" : "Copy install command"}
             done={zh ? "已复制" : "Copied"}
           />
-          <p className="hero-meta">
+          <p className="hero-meta" data-reveal data-reveal-delay="200">
             Go 1.23+<span>·</span>MIT<span>·</span>
             {zh
               ? "零第三方运行时依赖"
@@ -146,7 +151,12 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
         aria-label={zh ? "Mino 的六个亮点" : "Why Mino"}
       >
         {features.map(([title, description], i) => (
-          <div className="feature" key={title}>
+          <div
+            className="feature"
+            key={title}
+            data-reveal
+            data-reveal-delay={(i % 3) * 55}
+          >
             <span className="feature-index">0{i + 1}</span>
             <h2>{title}</h2>
             <p>{description}</p>
@@ -155,7 +165,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
       </section>
 
       <section className="hello-section" id="hello">
-        <div className="hello-intro">
+        <div className="hello-intro" data-reveal>
           <p className="eyebrow">HELLO, MINO.</p>
           <h2>
             {zh ? (
@@ -181,7 +191,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
             <ArrowRight size={15} />
           </Link>
         </div>
-        <div className="code-window">
+        <div className="code-window" data-reveal data-reveal-delay="90">
           <div className="code-caption">
             <span>main.go</span>
             <span>net/http + Mino</span>
@@ -196,7 +206,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
       </section>
 
       <section className="story-section" id="progressive">
-        <div className="section-intro">
+        <div className="section-intro" data-reveal>
           <div>
             <p className="eyebrow">01 / ROOM TO GROW</p>
             <h2>{zh ? "今天够用，明天从容。" : "Room to grow."}</h2>
@@ -208,7 +218,12 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
         </div>
         <div className="growth-steps">
           {steps.map(([title, text, packages], i) => (
-            <div className="growth-step" key={title}>
+            <div
+              className="growth-step"
+              key={title}
+              data-reveal
+              data-reveal-delay={i * 80}
+            >
               <span className="step-number">{i + 1}</span>
               <h3>{title}</h3>
               <p>{text}</p>
@@ -219,7 +234,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
       </section>
 
       <section className="migration-section" id="migration">
-        <div>
+        <div data-reveal>
           <p className="eyebrow">02 / AT HOME IN NET/HTTP</p>
           <h2>
             {zh ? (
@@ -245,7 +260,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
             <ArrowRight size={15} />
           </Link>
         </div>
-        <div className="migration-code">
+        <div className="migration-code" data-reveal data-reveal-delay="90">
           <div className="code-caption">
             <span>{zh ? "从这里开始" : "Start here"}</span>
             <span>main.go</span>
@@ -270,7 +285,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
       </section>
 
       <section className="story-section" id="performance">
-        <div className="section-intro">
+        <div className="section-intro" data-reveal>
           <div>
             <p className="eyebrow">03 / SMALL CODE. MEASURED SPEED.</p>
             <h2>{zh ? "快，有据可查。" : "Speed, with the evidence."}</h2>
@@ -281,7 +296,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
           </Link>
         </div>
         <div className="benchmark-layout">
-          <div className="benchmark-aside">
+          <div className="benchmark-aside" data-reveal>
             <p className="big-number">
               85.5<span>ns/op</span>
             </p>
@@ -306,7 +321,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
               <ArrowRight size={14} />
             </Link>
           </div>
-          <div className="benchmark-table">
+          <div className="benchmark-table" data-reveal data-reveal-delay="90">
             <div
               className="table-scroll"
               tabIndex={0}
@@ -372,7 +387,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
         </div>
       </section>
 
-      <section className="closing">
+      <section className="closing" data-reveal>
         <p className="eyebrow">YOUR CODE. YOUR PACE.</p>
         <h2>
           {zh ? "从你需要的那一部分开始。" : "Start with the part you need."}
@@ -383,8 +398,8 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
         </Link>
       </section>
       <footer className="landing-footer">
-        <Link className="mino-wordmark" href="/">
-          mino<span>.</span>
+        <Link href="/">
+          <BrandLogo />
         </Link>
         <p>{zh ? "轻装起步，自然成长。" : "Start small. Grow naturally."}</p>
         <div>
@@ -394,6 +409,6 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
           <a href="https://github.com/hainuoli/mino/blob/main/LICENSE">MIT</a>
         </div>
       </footer>
-    </main>
+    </LandingMotion>
   );
 }
