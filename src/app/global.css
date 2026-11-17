@@ -684,57 +684,115 @@ button:focus-visible,
   }
 }
 
-/* Moon illustration. */
-.moon-art {
+/* The official Mino symbol, with a little life of its own. */
+.mascot-art {
+  display: block;
   position: relative;
   width: 100%;
   max-width: 530px;
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
   color: var(--color-fd-foreground);
+  line-height: 0;
+  cursor: pointer;
+  touch-action: manipulation;
 }
-.moon-orbit {
+.mascot-illustration {
+  display: block;
   width: 100%;
   height: auto;
   overflow: visible;
 }
-.orbit-back,
-.orbit-sketch,
-.orbit-front {
-  stroke: currentColor;
-  stroke-width: 0.9;
-  stroke-linecap: round;
+.mascot-shadow {
+  opacity: 0.055;
 }
-.orbit-back {
-  opacity: 0.24;
+.mascot-perk {
+  transition: transform 350ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.orbit-sketch {
-  opacity: 0.13;
-  stroke-width: 0.65;
+.mascot-gaze {
+  transform: translate(var(--mascot-look-x, 0px), var(--mascot-look-y, 0px));
+  transition: transform 180ms ease-out;
 }
-.orbit-front {
-  opacity: 0.6;
-  stroke-width: 1.2;
+.mascot-blink,
+.mascot-eye {
+  transform-box: fill-box;
+  transform-origin: center;
 }
-.sketch-star {
-  stroke: currentColor;
-  stroke-width: 1.1;
-  stroke-linejoin: round;
-  opacity: 0.65;
+.mascot-eye {
+  transition: transform 900ms ease;
 }
-.sketch-arrow {
-  stroke: currentColor;
-  stroke-width: 1.1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.5;
+.mascot-art[data-state="drowsy"] .mascot-eye {
+  transform: rotate(25deg);
 }
-.pixel-star {
-  opacity: 0.55;
+.mascot-art[data-state="sleeping"] .mascot-eye {
+  transform: rotate(90deg);
 }
-.moon-orbit text {
+.mascot-sleep-cloud {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 450ms ease;
+}
+.mascot-art[data-state="sleeping"] .mascot-sleep-cloud {
+  opacity: 1;
+}
+.mascot-illustration .mascot-sleep-letter {
+  opacity: 0;
+  font-size: 19px;
+}
+.mascot-art[data-awake="true"] .mascot-sleep-letter {
+  animation: mino-sleep-drift 4.2s linear infinite both paused;
+}
+.mascot-art[data-awake="true"] .mascot-sleep-letter:nth-child(2) {
+  animation-delay: 1.4s;
+}
+.mascot-art[data-awake="true"] .mascot-sleep-letter:nth-child(3) {
+  animation-delay: 2.8s;
+}
+.mascot-art[data-awake="true"][data-state="sleeping"] .mascot-sleep-letter {
+  animation-play-state: running;
+}
+@keyframes mino-sleep-drift {
+  0% {
+    opacity: 0;
+    transform: translate(0, 3px);
+  }
+  20% {
+    opacity: 0.45;
+  }
+  70% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(38px, -55px);
+  }
+}
+.mascot-hello {
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 250ms,
+    transform 350ms;
+}
+.mascot-arrow {
+  opacity: 0.45;
+}
+.mascot-illustration text {
   font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
   font-size: 15px;
   fill: currentColor;
-  opacity: 0.65;
+  opacity: 0.6;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mascot-art[data-state="awake"]:is(:hover, :focus-visible) .mascot-perk {
+    transform: translateY(-5px);
+  }
+  .mascot-art[data-state="awake"]:is(:hover, :focus-visible) .mascot-hello {
+    opacity: 0.55;
+    transform: translateY(0);
+  }
 }
 .hero h1 span {
   position: relative;
@@ -802,52 +860,6 @@ button:focus-visible,
   animation: mino-underline 1000ms 180ms cubic-bezier(0.22, 1, 0.36, 1)
     backwards;
 }
-.landing[data-motion="ready"] .moon-float {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: mino-float 9s ease-in-out infinite;
-}
-.landing[data-motion="ready"]
-  :is(.orbit-back, .orbit-sketch, .orbit-front, .sketch-arrow) {
-  stroke-dasharray: 1;
-  animation: mino-draw 1400ms 150ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-}
-.landing[data-motion="ready"] .orbit-sketch {
-  animation-delay: 300ms;
-}
-.landing[data-motion="ready"] .sketch-arrow {
-  animation-delay: 500ms;
-}
-.landing[data-motion="ready"] :is(.sketch-star, .pixel-star) {
-  animation: mino-twinkle 7s ease-in-out infinite alternate;
-}
-.landing[data-motion="ready"] .sketch-star:nth-of-type(2n) {
-  animation-delay: -3s;
-}
-.landing[data-motion="ready"]
-  :is(
-    .moon-float,
-    .orbit-back,
-    .orbit-sketch,
-    .orbit-front,
-    .sketch-arrow,
-    .sketch-star,
-    .pixel-star
-  ) {
-  animation-play-state: paused;
-}
-.landing[data-motion="ready"][data-hero-visible="true"]
-  :is(
-    .moon-float,
-    .orbit-back,
-    .orbit-sketch,
-    .orbit-front,
-    .sketch-arrow,
-    .sketch-star,
-    .pixel-star
-  ) {
-  animation-play-state: running;
-}
 .growth-step {
   position: relative;
 }
@@ -887,31 +899,6 @@ button:focus-visible,
     transform: rotate(-2deg) scaleX(1);
   }
 }
-@keyframes mino-draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-@keyframes mino-float {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0);
-  }
-  50% {
-    transform: translateY(-6px) rotate(0.6deg);
-  }
-}
-@keyframes mino-twinkle {
-  from {
-    opacity: 0.35;
-  }
-  to {
-    opacity: 0.7;
-  }
-}
 @media (max-width: 1000px) {
   .hello-section {
     gap: 36px;
@@ -926,7 +913,7 @@ button:focus-visible,
     min-height: auto;
     padding: 42px 0 28px;
   }
-  .moon-art {
+  .mascot-art {
     max-width: 360px;
     margin-inline: auto;
   }

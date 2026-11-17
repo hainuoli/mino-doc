@@ -18,15 +18,12 @@ export function LandingMotion({
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     const animations = new Set<Animation>();
     let entrances: IntersectionObserver | undefined;
-    let hero: IntersectionObserver | undefined;
 
     function stop() {
       entrances?.disconnect();
-      hero?.disconnect();
       animations.forEach((animation) => animation.cancel());
       animations.clear();
       root?.removeAttribute("data-motion");
-      root?.removeAttribute("data-hero-visible");
     }
 
     function start() {
@@ -62,12 +59,6 @@ export function LandingMotion({
       root
         .querySelectorAll("[data-reveal]")
         .forEach((element) => entrances?.observe(element));
-
-      hero = new IntersectionObserver(([entry]) => {
-        root.dataset.heroVisible = String(entry.isIntersecting);
-      });
-      const illustration = root.querySelector(".moon-art");
-      if (illustration) hero.observe(illustration);
     }
 
     function update() {

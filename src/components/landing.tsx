@@ -3,7 +3,7 @@ import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { highlight } from "fumadocs-core/highlight";
 import { CopyCommand } from "./copy-command";
 import { hello } from "@/lib/examples";
-import { Moon } from "./moon";
+import { Mascot } from "./mascot";
 import { BrandLogo } from "./brand-logo";
 import { LandingMotion } from "./landing-motion";
 
@@ -143,7 +143,7 @@ export async function Landing({ lang = "zh" }: { lang?: "zh" | "en" }) {
               : "Zero third-party runtime dependencies"}
           </p>
         </div>
-        <Moon />
+        <Mascot label={zh ? "和 Mino 打个招呼" : "Say hello to Mino"} />
       </section>
 
       <section
